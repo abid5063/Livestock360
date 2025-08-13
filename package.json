@@ -1,0 +1,22 @@
+{
+  "name": "agl",
+  "version": "1.0.0",
+  "description": "An AI-Powered animal disease detection app",
+  "main": "index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abid5063/AGL.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/abid5063/AGL/issues"
+  },
+  "homepage": "https://github.com/abid5063/AGL#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.53.2",
+    "@types/node": "^24.0.10"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "moduleNameMapper": {
+    "^react-native$": "<rootDir>/node_modules/react-native",
+    "^react-native/Libraries/Utilities/Platform$": "<rootDir>/__tests__/mocks/PlatformMock.js"
+  },
+  "preset": "jest-expo",
+  "transformIgnorePatterns": [
+    "node_modules/(?!(jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"
+  ],
+  "setupFilesAfterEnv": [
+    "<rootDir>/__tests__/setup.js"
+  ],
+  "moduleFileExtensions": [
+    "ts",
+    "tsx",
+    "js",
+    "jsx"
+  ],
+  "testPathIgnorePatterns": [
+    "<rootDir>/node_modules/",
+    "<rootDir>/__tests__/setup.js",
+    "<rootDir>/__tests__/mocks/"
+  ],
+  "collectCoverage": true,
+  "collectCoverageFrom": [
+    "**/*.{js,jsx,ts,tsx}",
+    "!**/coverage/**",
+    "!**/node_modules/**",
+    "!**/babel.config.js",
+    "!**/jest.config.js"
+  ]
+}

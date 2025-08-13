@@ -1,0 +1,4 @@
+com\livestock360\backend\SimpleBackend$LoginHandler.class
+com\livestock360\backend\SimpleBackend.class
+com\livestock360\backend\SimpleBackend$RegisterHandler.class
+com\livestock360\backend\SimpleBackend$CorsHandler.class

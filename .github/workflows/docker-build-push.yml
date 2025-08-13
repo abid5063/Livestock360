@@ -1,0 +1,202 @@
+name: Build, Push and Deploy Docker Images
+
+on:
+  push:
+    branches: [ main ]  # Updated to include your test branch
+  pull_request:
+    branches: [ main ]
+ 
+env:
+  DOCKER_HUB_USERNAME: abidhasan83  # Your Docker Hub username
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ env.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+        
+    - name: Extract metadata for backend
+      id: meta-backend
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.DOCKER_HUB_USERNAME }}/agrolink-backend
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix=sha-
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: Extract metadata for mobile
+      id: meta-mobile
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.DOCKER_HUB_USERNAME }}/agrolink-mobile
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix=sha-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and push backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ steps.meta-backend.outputs.tags }}
+        labels: ${{ steps.meta-backend.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          MONGO_URI=${{ secrets.MONGO_URI }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
+          NODE_ENV=production
+        
+    - name: Build and push mobile image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./mobile
+        file: ./mobile/Dockerfile
+        push: true
+        tags: ${{ steps.meta-mobile.outputs.tags }}
+        labels: ${{ steps.meta-mobile.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Print image information
+      run: |
+        echo "Backend images pushed:"
+        echo "${{ steps.meta-backend.outputs.tags }}"
+        echo "Mobile images pushed:"
+        echo "${{ steps.meta-mobile.outputs.tags }}"
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' )
+
+    steps:
+    - name: Deploy to Azure VM
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VM_HOST }}
+        username: ${{ secrets.VM_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          echo "🚀 Starting deployment..."
+          
+          # Install Docker if not already installed
+          if ! command -v docker &> /dev/null; then
+            echo "Installing Docker..."
+            sudo apt-get update
+            sudo apt-get install -y docker.io docker-compose
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            sudo usermod -aG docker $USER
+          fi
+          
+          # Create project directory
+          mkdir -p ~/agrolink-deployment
+          cd ~/agrolink-deployment
+          
+          # Create docker-compose.yml file for backend only
+          cat > docker-compose.yml << 'EOF'
+          services:
+            backend:
+              image: abidhasan83/agrolink-backend:latest
+              ports:
+                - "80:3000"
+              environment:
+                - MONGO_URI=${{ secrets.MONGO_URI }}
+                - PORT=3000
+                - JWT_SECRET=${{ secrets.JWT_SECRET }}
+                - CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
+                - CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
+                - CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
+                - NODE_ENV=production
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:3000/api/health", "||", "exit", "1"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+          EOF
+          
+          # Stop existing containers
+          echo "Stopping existing containers..."
+          sudo docker-compose down --remove-orphans || true
+          
+          # Pull latest backend image only
+          echo "Pulling latest backend Docker image..."
+          sudo docker pull abidhasan83/agrolink-backend:latest
+          
+          # Remove old images to save space
+          sudo docker image prune -f
+          
+          # Start backend container
+          echo "Starting backend container..."
+          sudo docker-compose up -d
+          
+          # Wait for backend to be healthy
+          echo "Waiting for backend to be ready..."
+          sleep 30
+          
+          # Check container status
+          echo "Checking backend container status..."
+          sudo docker-compose ps
+          
+          # Verify container is actually running
+          if ! sudo docker-compose ps | grep -q "Up"; then
+            echo "❌ ERROR: Backend container is not running!"
+            echo "Container logs:"
+            sudo docker-compose logs backend
+            exit 1
+          fi
+          
+          # Show backend logs for debugging
+          echo "Backend logs:"
+          sudo docker-compose logs --tail=30 backend
+          
+          # Test backend health endpoints
+          echo "Testing backend endpoints..."
+          
+          # Test basic connection
+          if curl -s --connect-timeout 10 http://localhost:3000/ > /dev/null; then
+            echo "✅ Backend is responding on port 3000"
+          else
+            echo "⚠️ Backend not responding on port 3000"
+          fi
+          
+          # Test health endpoint
+          if curl -s --connect-timeout 10 http://localhost:3000/api/health > /dev/null; then
+            echo "✅ Health endpoint is working"
+          else
+            echo "⚠️ Health endpoint not available"
+          fi
+          
+          # Test database connection by trying to access any API endpoint
+          if curl -s --connect-timeout 10 http://localhost:3000/api/auth/test > /dev/null; then
+            echo "✅ Database connection appears to be working"
+          else
+            echo "⚠️ API endpoints may not be working (could be normal if no test endpoint exists)"
+          fi
+          
+          echo "✅ Backend deployment completed successfully!"
+          echo "Backend API available at: http://${{ secrets.VM_HOST }}:80"
+          echo "Backend also available at: http://${{ secrets.VM_HOST }}:3000"
+
