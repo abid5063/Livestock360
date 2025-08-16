@@ -1,4 +1,7 @@
-com\livestock360\backend\SimpleBackend$LoginHandler.class
+com\livestock360\backend\SimpleBackend$2.class
 com\livestock360\backend\SimpleBackend.class
+com\livestock360\backend\SimpleBackend$LoginHandler.class
 com\livestock360\backend\SimpleBackend$RegisterHandler.class
+com\livestock360\backend\SimpleBackend$1.class
 com\livestock360\backend\SimpleBackend$CorsHandler.class
+com\livestock360\backend\SimpleBackend$AnimalHandler.class

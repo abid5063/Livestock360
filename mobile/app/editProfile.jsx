@@ -3,7 +3,7 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityInd
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from "axios";
-import { API_BASE_URL } from '../utils/apiConfig'; // Adjust the import path as needed
+import { API_BASE_URL, ALL_ALERTS } from '../utils/apiConfig'; // Adjust the import path as needed
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
 
@@ -36,81 +36,132 @@ export default function EditProfile() {
       !formData.name.trim() ||
       !formData.email.trim()
     ) {
-      Alert.alert(t('editProfile.validation'), t('editProfile.fillRequiredFields'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('editProfile.validation'), t('editProfile.fillRequiredFields'));
+      }
       return;
     }
-    Alert.alert(
-      t('editProfile.saveChangesTitle'),
-      t('editProfile.saveChangesMessage'),
-      [
-        { text: t('editProfile.cancel'), style: 'cancel' },
-        {
-          text: t('editProfile.save'),
-          style: 'default',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const token = await AsyncStorage.getItem('authToken');
-              await axios.put(
-                `${API_BASE_URL}/api/auth/edit/${farmer._id}`,
-                formData,
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('editProfile.saveChangesTitle'),
+        t('editProfile.saveChangesMessage'),
+        [
+          { text: t('editProfile.cancel'), style: 'cancel' },
+          {
+            text: t('editProfile.save'),
+            style: 'default',
+            onPress: async () => {
+              try {
+                setLoading(true);
+                const token = await AsyncStorage.getItem('authToken');
+                await axios.put(
+                  `${API_BASE_URL}/api/auth/edit/${farmer._id}`,
+                  formData,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      'Content-Type': 'application/json'
+                    }
                   }
-                }
-              );
-              Alert.alert(t('editProfile.success'), t('editProfile.profileUpdated'));
-              router.replace({
-                pathname: '/profile',
-                params: { farmer: JSON.stringify({ ...farmer, ...formData }) }
-              });
-            } catch (error) {
-              Alert.alert(t('editProfile.error'), error.response?.data?.message || t('editProfile.failedToUpdate'));
-            } finally {
-              setLoading(false);
+                );
+                Alert.alert(t('editProfile.success'), t('editProfile.profileUpdated'));
+                router.replace({
+                  pathname: '/profile',
+                  params: { farmer: JSON.stringify({ ...farmer, ...formData }) }
+                });
+              } catch (error) {
+                Alert.alert(t('editProfile.error'), error.response?.data?.message || t('editProfile.failedToUpdate'));
+              } finally {
+                setLoading(false);
+              }
             }
           }
-        }
-      ]
-    );
+        ]
+      );
+    } else {
+      // Direct update without confirmation dialog
+      try {
+        setLoading(true);
+        const token = await AsyncStorage.getItem('authToken');
+        await axios.put(
+          `${API_BASE_URL}/api/auth/edit/${farmer._id}`,
+          formData,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        router.replace({
+          pathname: '/profile',
+          params: { farmer: JSON.stringify({ ...farmer, ...formData }) }
+        });
+      } catch (error) {
+        console.error('Profile update error:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const handleDeleteProfile = async () => {
-    Alert.alert(
-      t('editProfile.deleteProfileTitle'),
-      t('editProfile.deleteProfileMessage'),
-      [
-        { text: t('editProfile.cancel'), style: 'cancel' },
-        {
-          text: t('editProfile.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const token = await AsyncStorage.getItem('authToken');
-              console.log(token);
-              await axios.delete(
-                `${API_BASE_URL}/api/auth/delete/${farmer._id}`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('editProfile.deleteProfileTitle'),
+        t('editProfile.deleteProfileMessage'),
+        [
+          { text: t('editProfile.cancel'), style: 'cancel' },
+          {
+            text: t('editProfile.delete'),
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                setLoading(true);
+                const token = await AsyncStorage.getItem('authToken');
+                console.log(token);
+                await axios.delete(
+                  `${API_BASE_URL}/api/auth/delete/${farmer._id}`,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`
+                    }
                   }
-                }
-              );
-              await AsyncStorage.multiRemove(['authToken', 'userData']);
-              Alert.alert(t('editProfile.deleted'), t('editProfile.profileDeleted'));
-              router.replace('/');
-            } catch (error) {
-              Alert.alert(t('editProfile.error'), error.response?.data?.message || t('editProfile.failedToDelete'));
-            } finally {
-              setLoading(false);
+                );
+                await AsyncStorage.multiRemove(['authToken', 'userData']);
+                Alert.alert(t('editProfile.deleted'), t('editProfile.profileDeleted'));
+                router.replace('/');
+              } catch (error) {
+                Alert.alert(t('editProfile.error'), error.response?.data?.message || t('editProfile.failedToDelete'));
+              } finally {
+                setLoading(false);
+              }
             }
           }
-        }
-      ]
-    );
+        ]
+      );
+    } else {
+      // Direct delete without confirmation dialog
+      try {
+        setLoading(true);
+        const token = await AsyncStorage.getItem('authToken');
+        console.log(token);
+        await axios.delete(
+          `${API_BASE_URL}/api/auth/delete/${farmer._id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+        await AsyncStorage.multiRemove(['authToken', 'userData']);
+        router.replace('/');
+      } catch (error) {
+        console.error('Profile delete error:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   if (!farmer) {

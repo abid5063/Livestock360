@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Modal, Tex
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from "axios";
-import { API_BASE_URL } from '../utils/apiConfig';
+import { API_BASE_URL, ALL_ALERTS } from '../utils/apiConfig';
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
 
@@ -41,7 +41,9 @@ export default function AnimalDetails() {
       !formData.age.trim() ||
       !formData.gender.trim()
     ) {
-      Alert.alert(t('alerts.validation'), t('alerts.fillRequiredFields'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.validation'), t('alerts.fillRequiredFields'));
+      }
       return;
     }
     try {
@@ -60,33 +62,42 @@ export default function AnimalDetails() {
           }
         }
       );
-      Alert.alert(t('alerts.success'), t('alerts.animalUpdatedSuccess'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.success'), t('alerts.animalUpdatedSuccess'));
+      }
       setEditModalVisible(false);
       router.replace({
         pathname: '/profile'
       });
     } catch (error) {
-      Alert.alert(t('alerts.error'), error.response?.data?.message || t('alerts.failedToUpdateAnimal'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.error'), error.response?.data?.message || t('alerts.failedToUpdateAnimal'));
+      }
     } finally {
       setLoading(false);
     }
   };
 
  const handleDeleteAnimal = () => {
-  Alert.alert(
-    t('animalDetails.deleteAnimal'),
-    t('animalDetails.deleteConfirmation'),
-    [
-      { text: t('animalDetails.cancel'), style: "cancel" },
-      {
-        text: t('animalDetails.delete'),
-        style: "destructive",
-        onPress: () => {
-          actuallyDeleteAnimal();
+  if (ALL_ALERTS) {
+    Alert.alert(
+      t('animalDetails.deleteAnimal'),
+      t('animalDetails.deleteConfirmation'),
+      [
+        { text: t('animalDetails.cancel'), style: "cancel" },
+        {
+          text: t('animalDetails.delete'),
+          style: "destructive",
+          onPress: () => {
+            actuallyDeleteAnimal();
+          }
         }
-      }
-    ]
-  );
+      ]
+    );
+  } else {
+    // Direct delete without confirmation
+    actuallyDeleteAnimal();
+  }
 };
 
 const actuallyDeleteAnimal = async () => {
@@ -101,10 +112,14 @@ const actuallyDeleteAnimal = async () => {
         }
       }
     );
-    Alert.alert(t('animalDetails.deleted'), t('animalDetails.animalRemovedSuccess'));
+    if (ALL_ALERTS) {
+      Alert.alert(t('animalDetails.deleted'), t('animalDetails.animalRemovedSuccess'));
+    }
     router.replace('/profile');
   } catch (error) {
-    Alert.alert(t('alerts.error'), error.response?.data?.message || t('animalDetails.failedToDeleteAnimal'));
+    if (ALL_ALERTS) {
+      Alert.alert(t('alerts.error'), error.response?.data?.message || t('animalDetails.failedToDeleteAnimal'));
+    }
   } finally {
     setLoading(false);
   }

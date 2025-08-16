@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AntDesign, Feather, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import axios from "axios";
 import * as ImagePicker from 'expo-image-picker';
-import { API_BASE_URL } from '../utils/apiConfig'; // Adjust the import path as needed
+import { API_BASE_URL, ALL_ALERTS } from '../utils/apiConfig'; // Adjust the import path as needed
 import { useLanguage } from "../utils/LanguageContext";
 import { useTranslation } from 'react-i18next';
 const { width } = Dimensions.get('window');
@@ -84,7 +84,9 @@ export default function Profile() {
         await fetchConversations();
         await fetchVets();
       } catch (error) {
-        Alert.alert(t('alerts.error'), t('alerts.failedToLoadData'));
+        if (ALL_ALERTS) {
+          Alert.alert(t('alerts.error'), t('alerts.failedToLoadData'));
+        }
       } finally {
         setLoading(false);
       }
@@ -103,11 +105,15 @@ export default function Profile() {
       setAnimals(response.data);
     } catch (error) {
       if (error.response?.status === 401) {
-        Alert.alert(t('alerts.sessionExpired'), t('alerts.pleaseLoginAgain'));
+        if (ALL_ALERTS) {
+          Alert.alert(t('alerts.sessionExpired'), t('alerts.pleaseLoginAgain'));
+        }
         await AsyncStorage.multiRemove(['authToken', 'userData']);
         router.replace('/');
       } else {
-        Alert.alert(t('alerts.error'), t('alerts.failedToFetchAnimals'));
+        if (ALL_ALERTS) {
+          Alert.alert(t('alerts.error'), t('alerts.failedToFetchAnimals'));
+        }
       }
     }
   };
@@ -116,7 +122,9 @@ export default function Profile() {
     // Request permissions first
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(t('alerts.permissionRequired'), t('alerts.cameraRollPermission'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.permissionRequired'), t('alerts.cameraRollPermission'));
+      }
       return;
     }
 
@@ -134,25 +142,35 @@ export default function Profile() {
   };
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to log out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await AsyncStorage.multiRemove(['authToken', 'userData']);
-              router.replace('/');
-            } catch (error) {
-              Alert.alert(t('alerts.error'), t('alerts.failedToLogout'));
+    if (ALL_ALERTS) {
+      Alert.alert(
+        'Sign Out',
+        'Are you sure you want to log out?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Log Out',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await AsyncStorage.multiRemove(['authToken', 'userData']);
+                router.replace('/');
+              } catch (error) {
+                Alert.alert(t('alerts.error'), t('alerts.failedToLogout'));
+              }
             }
           }
-        }
-      ]
-    );
+        ]
+      );
+    } else {
+      // Direct logout without confirmation
+      try {
+        await AsyncStorage.multiRemove(['authToken', 'userData']);
+        router.replace('/');
+      } catch (error) {
+        console.error('Logout error:', error);
+      }
+    }
   };
 
   const handleInputChange = (name, value) => {
@@ -170,7 +188,9 @@ export default function Profile() {
       !formData.age.trim() ||
       !formData.gender.trim()
     ) {
-      Alert.alert(t('alerts.validation'), t('alerts.fillRequiredFields'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.validation'), t('alerts.fillRequiredFields'));
+      }
       return;
     }
     try {
@@ -200,9 +220,13 @@ export default function Profile() {
         details: ''
       });
       setImage(null);
-      Alert.alert(t('alerts.success'), t('alerts.animalAddedSuccess'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.success'), t('alerts.animalAddedSuccess'));
+      }
     } catch (error) {
-      Alert.alert(t('alerts.error'), error.response?.data?.message || t('alerts.failedToAddAnimal'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.error'), error.response?.data?.message || t('alerts.failedToAddAnimal'));
+      }
     }
   };
 
@@ -214,7 +238,9 @@ export default function Profile() {
       !formData.age.trim() ||
       !formData.gender.trim()
     ) {
-      Alert.alert(t('alerts.validation'), t('alerts.fillRequiredFields'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.validation'), t('alerts.fillRequiredFields'));
+      }
       return;
     }
     try {
@@ -239,9 +265,13 @@ export default function Profile() {
       setEditModalVisible(false);
       setCurrentAnimal(null);
       setImage(null);
-      Alert.alert(t('alerts.success'), t('alerts.animalUpdatedSuccess'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.success'), t('alerts.animalUpdatedSuccess'));
+      }
     } catch (error) {
-      Alert.alert(t('alerts.error'), error.response?.data?.message || t('alerts.failedToUpdateAnimal'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.error'), error.response?.data?.message || t('alerts.failedToUpdateAnimal'));
+      }
     }
   };
 
@@ -291,7 +321,9 @@ export default function Profile() {
       setConversationMessages(response.data.messages || []);
     } catch (error) {
       console.error("Error fetching conversation:", error);
-      Alert.alert(t('alerts.error'), t('alerts.failedToLoadConversation'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.error'), t('alerts.failedToLoadConversation'));
+      }
     }
   };
 
@@ -341,7 +373,9 @@ export default function Profile() {
       
     } catch (error) {
       console.error("Error sending message:", error);
-      Alert.alert(t('alerts.error'), t('alerts.failedToSendMessage'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.error'), t('alerts.failedToSendMessage'));
+      }
     }
   };
 
