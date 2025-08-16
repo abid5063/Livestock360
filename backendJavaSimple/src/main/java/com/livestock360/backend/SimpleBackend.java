@@ -48,6 +48,11 @@ public class SimpleBackend {
         // Auth routes
         server.createContext("/api/auth/register", new RegisterHandler());
         server.createContext("/api/auth/login", new LoginHandler());
+        server.createContext("/api/auth/refresh", new RefreshTokenHandler());
+        server.createContext("/api/auth/edit", new EditProfileHandler());
+        server.createContext("/api/auth/delete", new DeleteProfileHandler());
+        server.createContext("/api/auth/farmers/search", new SearchFarmersHandler());
+        server.createContext("/api/auth/farmers", new GetFarmersHandler());
         
         // Animal routes
         server.createContext("/api/animals", new AnimalHandler());
@@ -60,6 +65,11 @@ public class SimpleBackend {
         System.out.println("✅ Available endpoints:");
         System.out.println("   POST /api/auth/register");
         System.out.println("   POST /api/auth/login");
+        System.out.println("   POST /api/auth/refresh");
+        System.out.println("   PUT  /api/auth/edit/{id}");
+        System.out.println("   DELETE /api/auth/delete/{id}");
+        System.out.println("   GET  /api/auth/farmers/search");
+        System.out.println("   GET  /api/auth/farmers");
         System.out.println("   GET  /api/animals");
         System.out.println("   POST /api/animals");
         System.out.println("   GET  /api/animals/{id}");
@@ -172,15 +182,16 @@ public class SimpleBackend {
                 // Save to database
                 farmers.insertOne(farmer);
                 
-                // Generate simple token (farmer ID)
-                String token = "token_" + farmer.getObjectId("_id").toString();
+                // Generate JWT token
+                String farmerId = farmer.getObjectId("_id").toString();
+                String token = JwtUtil.generateToken(farmerId, email, name);
                 
                 // Response (exactly like Node.js)
                 Map<String, Object> response = new HashMap<>();
                 response.put("token", token);
                 
                 Map<String, Object> farmerData = new HashMap<>();
-                farmerData.put("_id", farmer.getObjectId("_id").toString());
+                farmerData.put("_id", farmerId);
                 farmerData.put("name", farmer.getString("name"));
                 farmerData.put("email", farmer.getString("email"));
                 farmerData.put("profileImage", farmer.getString("profileImage"));
@@ -251,20 +262,98 @@ public class SimpleBackend {
                     return;
                 }
                 
-                // Generate token
-                String token = "token_" + farmer.getObjectId("_id").toString();
+                // Generate JWT token
+                String farmerId = farmer.getObjectId("_id").toString();
+                String farmerName = farmer.getString("name");
+                String farmerEmail = farmer.getString("email");
+                String token = JwtUtil.generateToken(farmerId, farmerEmail, farmerName);
                 
                 // Response (exactly like Node.js)
                 Map<String, Object> response = new HashMap<>();
                 response.put("token", token);
                 
                 Map<String, Object> farmerData = new HashMap<>();
-                farmerData.put("id", farmer.getObjectId("_id").toString());
-                farmerData.put("name", farmer.getString("name"));
-                farmerData.put("email", farmer.getString("email"));
+                farmerData.put("id", farmerId);
+                farmerData.put("name", farmerName);
+                farmerData.put("email", farmerEmail);
                 farmerData.put("profileImage", farmer.getString("profileImage"));
                 farmerData.put("phoneNo", farmer.getString("phoneNo"));
                 farmerData.put("location", farmer.getString("location"));
+
+                response.put("farmer", farmerData);
+                
+                System.out.println("✅ Login response farmer data: " + gson.toJson(farmerData));                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Farmer logged in: " + email);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+    }
+    
+    /**
+     * JWT Refresh Handler - /api/auth/refresh
+     * Refreshes JWT token if close to expiry
+     */
+    static class RefreshTokenHandler implements HttpHandler {
+        public void handle(HttpExchange exchange) throws IOException {
+            // Add CORS headers
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(200, 0);
+                exchange.close();
+                return;
+            }
+            
+            if (!"POST".equals(exchange.getRequestMethod())) {
+                sendError(exchange, 405, "Method not allowed");
+                return;
+            }
+            
+            try {
+                // Authenticate current token
+                String farmerId = authenticateRequest(exchange);
+                if (farmerId == null) {
+                    sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                    return;
+                }
+                
+                // Get current token
+                String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+                String currentToken = authHeader.substring(7);
+                
+                // Try to refresh token
+                String newToken = JwtUtil.refreshTokenIfNeeded(currentToken);
+                if (newToken == null) {
+                    sendError(exchange, 401, "Token has expired and cannot be refreshed");
+                    return;
+                }
+                
+                // Get farmer details for response
+                String email = JwtUtil.getEmailFromToken(newToken);
+                String name = JwtUtil.getNameFromToken(newToken);
+                long remainingMinutes = JwtUtil.getRemainingMinutes(newToken);
+                
+                // Response
+                Map<String, Object> response = new HashMap<>();
+                response.put("token", newToken);
+                response.put("refreshed", !newToken.equals(currentToken));
+                response.put("expiresInMinutes", remainingMinutes);
+                
+                Map<String, Object> farmerData = new HashMap<>();
+                farmerData.put("id", farmerId);
+                farmerData.put("name", name);
+                farmerData.put("email", email);
                 
                 response.put("farmer", farmerData);
                 
@@ -274,7 +363,350 @@ public class SimpleBackend {
                 os.write(jsonResponse.getBytes());
                 os.close();
                 
-                System.out.println("✅ Farmer logged in: " + email);
+                System.out.println("✅ Token refresh successful for farmer: " + farmerId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+    }
+    
+    static class EditProfileHandler implements HttpHandler {
+        public void handle(HttpExchange exchange) throws IOException {
+            // Add CORS headers
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "PUT, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(200, 0);
+                exchange.close();
+                return;
+            }
+            
+            if (!"PUT".equals(exchange.getRequestMethod())) {
+                sendError(exchange, 405, "Method not allowed");
+                return;
+            }
+            
+            try {
+                // Extract farmer ID from URL path
+                String path = exchange.getRequestURI().getPath();
+                System.out.println("📝 Edit request path: " + path);
+                
+                // More flexible pattern matching
+                if (!path.startsWith("/api/auth/edit/")) {
+                    sendError(exchange, 404, "Invalid edit URL format");
+                    return;
+                }
+                String farmerIdFromUrl = path.substring("/api/auth/edit/".length());
+                System.out.println("📝 Farmer ID from URL: " + farmerIdFromUrl);
+                
+                // Check if it's a valid ObjectId format (24 hex characters)
+                if (farmerIdFromUrl.length() != 24 || !farmerIdFromUrl.matches("[a-f0-9]{24}")) {
+                    sendError(exchange, 400, "Invalid farmer ID format. Expected 24-character MongoDB ObjectId, got: " + farmerIdFromUrl);
+                    return;
+                }
+                
+                // Get farmer from JWT token
+                String farmerId = authenticateRequest(exchange);
+                if (farmerId == null) {
+                    sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                    return;
+                }
+                
+                // Check if farmer can only edit their own profile
+                if (!farmerId.equals(farmerIdFromUrl)) {
+                    sendError(exchange, 403, "You can only edit your own profile");
+                    return;
+                }
+                
+                // Read request body
+                InputStream inputStream = exchange.getRequestBody();
+                String body = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+                
+                // Parse JSON
+                Map<String, Object> updates = gson.fromJson(body, objectMapType);
+                
+                // Build update document
+                Document updateDoc = new Document();
+                if (updates.get("name") != null) updateDoc.append("name", updates.get("name"));
+                if (updates.get("email") != null) updateDoc.append("email", updates.get("email"));
+                if (updates.get("phoneNo") != null) updateDoc.append("phoneNo", updates.get("phoneNo"));
+                if (updates.get("location") != null) updateDoc.append("location", updates.get("location"));
+                if (updates.get("profileImage") != null) updateDoc.append("profileImage", updates.get("profileImage"));
+                
+                MongoCollection<Document> farmers = database.getCollection("farmers");
+                Document result = farmers.findOneAndUpdate(
+                    eq("_id", new ObjectId(farmerId)),
+                    new Document("$set", updateDoc),
+                    new com.mongodb.client.model.FindOneAndUpdateOptions().returnDocument(com.mongodb.client.model.ReturnDocument.AFTER)
+                );
+                
+                if (result == null) {
+                    sendError(exchange, 404, "Farmer not found");
+                    return;
+                }
+                
+                // Response
+                Map<String, Object> response = new HashMap<>();
+                response.put("message", "Farmer updated successfully");
+                
+                Map<String, Object> farmerData = new HashMap<>();
+                farmerData.put("id", result.getObjectId("_id").toString());
+                farmerData.put("name", result.getString("name"));
+                farmerData.put("email", result.getString("email"));
+                farmerData.put("profileImage", result.getString("profileImage"));
+                farmerData.put("phoneNo", result.getString("phoneNo"));
+                farmerData.put("location", result.getString("location"));
+                
+                response.put("farmer", farmerData);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Farmer profile updated: " + result.getString("name"));
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+    }
+    
+    static class DeleteProfileHandler implements HttpHandler {
+        public void handle(HttpExchange exchange) throws IOException {
+            // Add CORS headers
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "DELETE, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(200, 0);
+                exchange.close();
+                return;
+            }
+            
+            if (!"DELETE".equals(exchange.getRequestMethod())) {
+                sendError(exchange, 405, "Method not allowed");
+                return;
+            }
+            
+            try {
+                // Extract farmer ID from URL path
+                String path = exchange.getRequestURI().getPath();
+                System.out.println("🗑️ Delete request path: " + path);
+                
+                // More flexible pattern matching
+                if (!path.startsWith("/api/auth/delete/")) {
+                    sendError(exchange, 404, "Invalid delete URL format");
+                    return;
+                }
+                String farmerIdFromUrl = path.substring("/api/auth/delete/".length());
+                System.out.println("🗑️ Farmer ID from URL: " + farmerIdFromUrl);
+                
+                // Check if it's a valid ObjectId format (24 hex characters)
+                if (farmerIdFromUrl.length() != 24 || !farmerIdFromUrl.matches("[a-f0-9]{24}")) {
+                    sendError(exchange, 400, "Invalid farmer ID format. Expected 24-character MongoDB ObjectId, got: " + farmerIdFromUrl);
+                    return;
+                }
+                
+                // Get farmer from token
+                String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+                if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                    sendError(exchange, 401, "Access denied. No token provided.");
+                    return;
+                }
+                
+                String token = authHeader.substring(7);
+                String farmerId = extractFarmerIdFromToken(token);
+                if (farmerId == null) {
+                    sendError(exchange, 401, "Invalid token");
+                    return;
+                }
+                
+                // Check if farmer can only delete their own profile
+                if (!farmerId.equals(farmerIdFromUrl)) {
+                    sendError(exchange, 403, "You can only delete your own profile");
+                    return;
+                }
+                
+                MongoCollection<Document> farmers = database.getCollection("farmers");
+                Document result = farmers.findOneAndDelete(eq("_id", new ObjectId(farmerId)));
+                
+                if (result == null) {
+                    sendError(exchange, 404, "Farmer not found");
+                    return;
+                }
+                
+                // Also delete all related data (animals, vaccines, tasks, etc.)
+                MongoCollection<Document> animals = database.getCollection("animals");
+                MongoCollection<Document> vaccines = database.getCollection("vaccines");
+                MongoCollection<Document> tasks = database.getCollection("tasks");
+                
+                animals.deleteMany(eq("farmer", new ObjectId(farmerId)));
+                vaccines.deleteMany(eq("farmer", new ObjectId(farmerId)));
+                tasks.deleteMany(eq("farmer", new ObjectId(farmerId)));
+                
+                // Response
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "Farmer deleted successfully");
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Farmer profile deleted: " + result.getString("name"));
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+    }
+    
+    static class SearchFarmersHandler implements HttpHandler {
+        public void handle(HttpExchange exchange) throws IOException {
+            // Add CORS headers
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(200, 0);
+                exchange.close();
+                return;
+            }
+            
+            if (!"GET".equals(exchange.getRequestMethod())) {
+                sendError(exchange, 405, "Method not allowed");
+                return;
+            }
+            
+            try {
+                // Get search query parameter
+                String query = exchange.getRequestURI().getQuery();
+                String searchTerm = "";
+                if (query != null && query.contains("search=")) {
+                    String[] params = query.split("&");
+                    for (String param : params) {
+                        if (param.startsWith("search=")) {
+                            searchTerm = java.net.URLDecoder.decode(param.substring(7), StandardCharsets.UTF_8);
+                            break;
+                        }
+                    }
+                }
+                
+                MongoCollection<Document> farmers = database.getCollection("farmers");
+                List<Document> farmerList;
+                
+                if (searchTerm.isEmpty()) {
+                    farmerList = farmers.find()
+                        .projection(new Document("name", 1).append("location", 1).append("profileImage", 1).append("phoneNo", 1))
+                        .limit(20)
+                        .into(new ArrayList<>());
+                } else {
+                    // Search by name or location (case insensitive)
+                    Document searchQuery = new Document("$or", 
+                        java.util.Arrays.asList(
+                            new Document("name", new Document("$regex", searchTerm).append("$options", "i")),
+                            new Document("location", new Document("$regex", searchTerm).append("$options", "i"))
+                        )
+                    );
+                    
+                    farmerList = farmers.find(searchQuery)
+                        .projection(new Document("name", 1).append("location", 1).append("profileImage", 1).append("phoneNo", 1))
+                        .limit(20)
+                        .into(new ArrayList<>());
+                }
+                
+                // Convert to response format
+                List<Map<String, Object>> response = new ArrayList<>();
+                for (Document farmer : farmerList) {
+                    Map<String, Object> farmerData = new HashMap<>();
+                    farmerData.put("_id", farmer.getObjectId("_id").toString());
+                    farmerData.put("name", farmer.getString("name"));
+                    farmerData.put("location", farmer.getString("location"));
+                    farmerData.put("profileImage", farmer.getString("profileImage"));
+                    farmerData.put("phoneNo", farmer.getString("phoneNo"));
+                    response.add(farmerData);
+                }
+                
+                Map<String, Object> finalResponse = new HashMap<>();
+                finalResponse.put("farmers", response);
+                
+                String jsonResponse = gson.toJson(finalResponse);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Farmers search completed: " + response.size() + " results");
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+    }
+    
+    static class GetFarmersHandler implements HttpHandler {
+        public void handle(HttpExchange exchange) throws IOException {
+            // Add CORS headers
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(200, 0);
+                exchange.close();
+                return;
+            }
+            
+            if (!"GET".equals(exchange.getRequestMethod())) {
+                sendError(exchange, 405, "Method not allowed");
+                return;
+            }
+            
+            try {
+                MongoCollection<Document> farmers = database.getCollection("farmers");
+                List<Document> farmerList = farmers.find()
+                    .projection(new Document("name", 1).append("location", 1).append("profileImage", 1).append("phoneNo", 1))
+                    .limit(20)
+                    .into(new ArrayList<>());
+                
+                // Convert to response format
+                List<Map<String, Object>> response = new ArrayList<>();
+                for (Document farmer : farmerList) {
+                    Map<String, Object> farmerData = new HashMap<>();
+                    farmerData.put("_id", farmer.getObjectId("_id").toString());
+                    farmerData.put("name", farmer.getString("name"));
+                    farmerData.put("location", farmer.getString("location"));
+                    farmerData.put("profileImage", farmer.getString("profileImage"));
+                    farmerData.put("phoneNo", farmer.getString("phoneNo"));
+                    response.add(farmerData);
+                }
+                
+                Map<String, Object> finalResponse = new HashMap<>();
+                finalResponse.put("farmers", response);
+                
+                String jsonResponse = gson.toJson(finalResponse);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ All farmers retrieved: " + response.size() + " farmers");
                 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -611,11 +1043,39 @@ public class SimpleBackend {
     }
     
     private static String extractFarmerIdFromToken(String token) {
-        // Simple token format: "token_<farmerId>"
-        if (token.startsWith("token_")) {
-            return token.substring(6);
+        // Extract farmer ID from JWT token
+        return JwtUtil.getFarmerIdFromToken(token);
+    }
+    
+    /**
+     * Enhanced authentication with JWT validation
+     * @param exchange HTTP exchange containing headers
+     * @return Farmer ID if authenticated, null if not
+     */
+    private static String authenticateRequest(HttpExchange exchange) {
+        String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return null;
         }
-        return null;
+        
+        String token = authHeader.substring(7); // Remove "Bearer " prefix
+        
+        // Validate JWT token
+        if (JwtUtil.validateToken(token) == null) {
+            System.err.println("❌ Invalid JWT token provided");
+            return null;
+        }
+        
+        // Check if token is expired
+        if (JwtUtil.isTokenExpired(token)) {
+            System.err.println("❌ JWT token has expired");
+            return null;
+        }
+        
+        String farmerId = JwtUtil.getFarmerIdFromToken(token);
+        System.out.println("✅ JWT Authentication successful for farmer: " + farmerId);
+        
+        return farmerId;
     }
     
     private static void sendError(HttpExchange exchange, int statusCode, String message) throws IOException {

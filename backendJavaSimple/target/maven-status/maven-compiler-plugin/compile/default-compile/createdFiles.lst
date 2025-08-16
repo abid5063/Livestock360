@@ -1,7 +1,13 @@
 com\livestock360\backend\SimpleBackend$2.class
 com\livestock360\backend\SimpleBackend.class
+com\livestock360\backend\SimpleBackend$EditProfileHandler.class
+com\livestock360\backend\SimpleBackend$SearchFarmersHandler.class
+com\livestock360\backend\SimpleBackend$AnimalHandler.class
+com\livestock360\backend\SimpleBackend$GetFarmersHandler.class
+com\livestock360\backend\SimpleBackend$DeleteProfileHandler.class
+com\livestock360\backend\SimpleBackend$RefreshTokenHandler.class
 com\livestock360\backend\SimpleBackend$LoginHandler.class
+com\livestock360\backend\JwtUtil.class
 com\livestock360\backend\SimpleBackend$RegisterHandler.class
 com\livestock360\backend\SimpleBackend$1.class
 com\livestock360\backend\SimpleBackend$CorsHandler.class
-com\livestock360\backend\SimpleBackend$AnimalHandler.class

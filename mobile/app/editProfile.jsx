@@ -13,6 +13,11 @@ export default function EditProfile() {
   const { language } = useLanguage();
   const { t, i18n } = useTranslation();
 
+  // Debug the farmer object
+  console.log("🔍 EditProfile farmer object:", JSON.stringify(farmer, null, 2));
+  console.log("🔍 Farmer _id:", farmer?._id);
+  console.log("🔍 Farmer id:", farmer?.id);
+
   // Update i18n language when language changes
   useEffect(() => {
     i18n.changeLanguage(language);
@@ -55,7 +60,7 @@ export default function EditProfile() {
                 setLoading(true);
                 const token = await AsyncStorage.getItem('authToken');
                 await axios.put(
-                  `${API_BASE_URL}/api/auth/edit/${farmer._id}`,
+                  `${API_BASE_URL}/api/auth/edit/${farmer._id || farmer.id}`,
                   formData,
                   {
                     headers: {
@@ -84,7 +89,7 @@ export default function EditProfile() {
         setLoading(true);
         const token = await AsyncStorage.getItem('authToken');
         await axios.put(
-          `${API_BASE_URL}/api/auth/edit/${farmer._id}`,
+          `${API_BASE_URL}/api/auth/edit/${farmer._id || farmer.id}`,
           formData,
           {
             headers: {
@@ -121,7 +126,7 @@ export default function EditProfile() {
                 const token = await AsyncStorage.getItem('authToken');
                 console.log(token);
                 await axios.delete(
-                  `${API_BASE_URL}/api/auth/delete/${farmer._id}`,
+                  `${API_BASE_URL}/api/auth/delete/${farmer._id || farmer.id}`,
                   {
                     headers: {
                       Authorization: `Bearer ${token}`
@@ -147,7 +152,7 @@ export default function EditProfile() {
         const token = await AsyncStorage.getItem('authToken');
         console.log(token);
         await axios.delete(
-          `${API_BASE_URL}/api/auth/delete/${farmer._id}`,
+          `${API_BASE_URL}/api/auth/delete/${farmer._id || farmer.id}`,
           {
             headers: {
               Authorization: `Bearer ${token}`
