@@ -13,7 +13,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { API_BASE_URL } from '../utils/apiConfig'; // Adjust the import path as needed
+import { API_BASE_URL, ALL_ALERTS } from '../utils/apiConfig'; // Adjust the import path as needed
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
 // const API_BASE_URL = "http://localhost:3000/api";
@@ -54,7 +54,9 @@ export default function VaccineManagement() {
       setVaccines(response.data);
     } catch (error) {
       console.error('Error fetching vaccines:', error);
-      Alert.alert(t('vaccineManagement.error'), t('vaccineManagement.failedToFetchVaccines'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('vaccineManagement.error'), t('vaccineManagement.failedToFetchVaccines'));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -67,31 +69,51 @@ export default function VaccineManagement() {
   };
 
   const handleDeleteVaccine = async (vaccineId) => {
-    Alert.alert(
-      t('vaccineManagement.deleteVaccineRecord'),
-      t('vaccineManagement.deleteVaccineMessage'),
-      [
-        { text: t('vaccineManagement.cancel'), style: 'cancel' },
-        {
-          text: t('vaccineManagement.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('authToken');
-              await axios.delete(`${API_BASE_URL}/api/vaccines/${vaccineId}`, {
-                headers: {
-                  Authorization: `Bearer ${token}`
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('vaccineManagement.deleteVaccineRecord'),
+        t('vaccineManagement.deleteVaccineMessage'),
+        [
+          { text: t('vaccineManagement.cancel'), style: 'cancel' },
+          {
+            text: t('vaccineManagement.delete'),
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const token = await AsyncStorage.getItem('authToken');
+                await axios.delete(`${API_BASE_URL}/api/vaccines/${vaccineId}`, {
+                  headers: {
+                    Authorization: `Bearer ${token}`
+                  }
+                });
+                fetchVaccines(); // Refresh the list immediately
+              } catch (error) {
+                console.error('Error deleting vaccine:', error);
+                if (ALL_ALERTS) {
+                  Alert.alert(t('vaccineManagement.error'), t('vaccineManagement.failedToDeleteVaccine'));
                 }
-              });
-              fetchVaccines(); // Refresh the list immediately
-            } catch (error) {
-              console.error('Error deleting vaccine:', error);
-              Alert.alert(t('vaccineManagement.error'), t('vaccineManagement.failedToDeleteVaccine'));
+              }
             }
           }
+        ]
+      );
+    } else {
+      // If alerts are disabled, directly delete without confirmation
+      const performDelete = async () => {
+        try {
+          const token = await AsyncStorage.getItem('authToken');
+          await axios.delete(`${API_BASE_URL}/api/vaccines/${vaccineId}`, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          fetchVaccines(); // Refresh the list immediately
+        } catch (error) {
+          console.error('Error deleting vaccine:', error);
         }
-      ]
-    );
+      };
+      performDelete();
+    }
   };
 
   const formatDate = (dateString) => {

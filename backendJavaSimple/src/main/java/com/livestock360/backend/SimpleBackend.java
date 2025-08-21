@@ -26,8 +26,6 @@ import org.bson.types.ObjectId;
 import static com.mongodb.client.model.Filters.*;
 import java.lang.reflect.Type;
 import com.google.gson.reflect.TypeToken;
-import java.text.SimpleDateFormat;
-import java.text.ParseException;
 
 public class SimpleBackend {
     private static MongoDatabase database;
@@ -62,6 +60,9 @@ public class SimpleBackend {
         // Task routes
         server.createContext("/api/tasks", new TaskHandler());
         
+        // Vaccine routes
+        server.createContext("/api/vaccines", new VaccineHandler());
+        
         server.setExecutor(null);
         server.start();
         
@@ -87,6 +88,12 @@ public class SimpleBackend {
         System.out.println("   PATCH /api/tasks/{id}/toggle");
         System.out.println("   DELETE /api/tasks/{id}");
         System.out.println("   GET  /api/tasks/stats/overview");
+        System.out.println("   GET  /api/vaccines");
+        System.out.println("   POST /api/vaccines");
+        System.out.println("   GET  /api/vaccines/animal/{animalId}");
+        System.out.println("   GET  /api/vaccines/{id}");
+        System.out.println("   PUT  /api/vaccines/{id}");
+        System.out.println("   DELETE /api/vaccines/{id}");
     }
     
     static class CorsHandler implements HttpHandler {
@@ -1747,6 +1754,437 @@ public class SimpleBackend {
                 }
             }
             return params;
+        }
+    }
+    
+    /**
+     * Vaccine Handler - handles all vaccine-related operations
+     * Endpoints: GET, POST, PUT, DELETE /api/vaccines
+     */
+    static class VaccineHandler implements HttpHandler {
+        public void handle(HttpExchange exchange) throws IOException {
+            // Add CORS headers
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(200, 0);
+                exchange.close();
+                return;
+            }
+            
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
+            
+            try {
+                // Route to appropriate handler based on method and path
+                if ("POST".equals(method) && "/api/vaccines".equals(path)) {
+                    handleCreateVaccine(exchange);
+                } else if ("GET".equals(method) && "/api/vaccines".equals(path)) {
+                    handleGetVaccines(exchange);
+                } else if ("GET".equals(method) && path.matches("/api/vaccines/animal/[a-f0-9]{24}")) {
+                    handleGetAnimalVaccines(exchange);
+                } else if ("GET".equals(method) && path.matches("/api/vaccines/[a-f0-9]{24}")) {
+                    handleGetSingleVaccine(exchange);
+                } else if ("PUT".equals(method) && path.matches("/api/vaccines/[a-f0-9]{24}")) {
+                    handleUpdateVaccine(exchange);
+                } else if ("DELETE".equals(method) && path.matches("/api/vaccines/[a-f0-9]{24}")) {
+                    handleDeleteVaccine(exchange);
+                } else {
+                    sendError(exchange, 404, "Vaccine endpoint not found");
+                }
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // POST /api/vaccines - Create a new vaccine record
+        private void handleCreateVaccine(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Read request body
+                InputStream inputStream = exchange.getRequestBody();
+                String body = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+                
+                // Parse JSON
+                Map<String, Object> request = gson.fromJson(body, objectMapType);
+                String vaccineName = (String) request.get("vaccine_name");
+                String animalId = (String) request.get("animal_id");
+                String vaccineDate = (String) request.get("vaccine_date");
+                String notes = (String) request.get("notes");
+                String nextDueDate = (String) request.get("next_due_date");
+                
+                // Validate required fields
+                if (vaccineName == null || animalId == null || vaccineDate == null) {
+                    sendError(exchange, 400, "Please provide vaccine name, animal ID, and vaccine date");
+                    return;
+                }
+                
+                // Verify animal exists and belongs to farmer
+                MongoCollection<Document> animals = database.getCollection("animals");
+                Document animal = animals.find(and(
+                    eq("_id", new ObjectId(animalId)),
+                    eq("farmer", new ObjectId(farmerId))
+                )).first();
+                
+                if (animal == null) {
+                    sendError(exchange, 404, "Animal not found in your farm");
+                    return;
+                }
+                
+                // Create vaccine document
+                Document vaccine = new Document()
+                    .append("vaccine_name", vaccineName)
+                    .append("animal", new ObjectId(animalId))
+                    .append("animal_name", animal.getString("name"))
+                    .append("vaccine_date", parseDate(vaccineDate))
+                    .append("notes", notes != null ? notes : "")
+                    .append("farmer", new ObjectId(farmerId))
+                    .append("createdAt", new Date())
+                    .append("updatedAt", new Date());
+                
+                if (nextDueDate != null && !nextDueDate.isEmpty()) {
+                    vaccine.append("next_due_date", parseDate(nextDueDate));
+                }
+                
+                // Save to database
+                MongoCollection<Document> vaccines = database.getCollection("vaccines");
+                vaccines.insertOne(vaccine);
+                
+                // Prepare response with animal details
+                Map<String, Object> response = createVaccineResponse(vaccine);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(201, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Vaccine record created: " + vaccineName + " for " + animal.getString("name"));
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to create vaccine record");
+            }
+        }
+        
+        // GET /api/vaccines - Get all vaccine records for farmer
+        private void handleGetVaccines(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Get vaccines
+                MongoCollection<Document> vaccines = database.getCollection("vaccines");
+                List<Document> vaccineList = vaccines.find(eq("farmer", new ObjectId(farmerId)))
+                    .sort(new Document("vaccine_date", -1))
+                    .into(new ArrayList<>());
+                
+                // Convert to response format with animal details
+                List<Map<String, Object>> response = new ArrayList<>();
+                for (Document vaccine : vaccineList) {
+                    response.add(createVaccineResponse(vaccine));
+                }
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved " + vaccineList.size() + " vaccine records for farmer: " + farmerId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to fetch vaccines");
+            }
+        }
+        
+        // GET /api/vaccines/animal/{animalId} - Get vaccines for specific animal
+        private void handleGetAnimalVaccines(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Extract animal ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String animalId = path.substring(path.lastIndexOf('/') + 1);
+                
+                // Validate ObjectId format
+                if (animalId.length() != 24 || !animalId.matches("[a-f0-9]{24}")) {
+                    sendError(exchange, 400, "Invalid animal ID format");
+                    return;
+                }
+                
+                // Verify animal belongs to farmer
+                MongoCollection<Document> animals = database.getCollection("animals");
+                Document animal = animals.find(and(
+                    eq("_id", new ObjectId(animalId)),
+                    eq("farmer", new ObjectId(farmerId))
+                )).first();
+                
+                if (animal == null) {
+                    sendError(exchange, 404, "Animal not found in your farm");
+                    return;
+                }
+                
+                // Get vaccines for this animal
+                MongoCollection<Document> vaccines = database.getCollection("vaccines");
+                List<Document> vaccineList = vaccines.find(and(
+                    eq("animal", new ObjectId(animalId)),
+                    eq("farmer", new ObjectId(farmerId))
+                ))
+                .sort(new Document("vaccine_date", -1))
+                .into(new ArrayList<>());
+                
+                // Convert to response format with animal details
+                List<Map<String, Object>> response = new ArrayList<>();
+                for (Document vaccine : vaccineList) {
+                    response.add(createVaccineResponse(vaccine));
+                }
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved " + vaccineList.size() + " vaccine records for animal: " + animalId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to fetch animal vaccines");
+            }
+        }
+        
+        // GET /api/vaccines/{id} - Get single vaccine record
+        private void handleGetSingleVaccine(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Extract vaccine ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String vaccineId = path.substring(path.lastIndexOf('/') + 1);
+                
+                // Validate ObjectId format
+                if (vaccineId.length() != 24 || !vaccineId.matches("[a-f0-9]{24}")) {
+                    sendError(exchange, 400, "Invalid vaccine ID format");
+                    return;
+                }
+                
+                // Get vaccine
+                MongoCollection<Document> vaccines = database.getCollection("vaccines");
+                Document vaccine = vaccines.find(and(
+                    eq("_id", new ObjectId(vaccineId)),
+                    eq("farmer", new ObjectId(farmerId))
+                )).first();
+                
+                if (vaccine == null) {
+                    sendError(exchange, 404, "Vaccine record not found");
+                    return;
+                }
+                
+                // Response with animal details
+                Map<String, Object> response = createVaccineResponse(vaccine);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved vaccine record: " + vaccineId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to fetch vaccine record");
+            }
+        }
+        
+        // PUT /api/vaccines/{id} - Update vaccine record
+        private void handleUpdateVaccine(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Extract vaccine ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String vaccineId = path.substring(path.lastIndexOf('/') + 1);
+                
+                // Read request body
+                InputStream inputStream = exchange.getRequestBody();
+                String body = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+                
+                // Parse JSON
+                Map<String, Object> updates = gson.fromJson(body, objectMapType);
+                
+                // Handle animal_id update and validation
+                String newAnimalId = (String) updates.get("animal_id");
+                if (newAnimalId != null && !newAnimalId.isEmpty()) {
+                    MongoCollection<Document> animals = database.getCollection("animals");
+                    Document animal = animals.find(and(
+                        eq("_id", new ObjectId(newAnimalId)),
+                        eq("farmer", new ObjectId(farmerId))
+                    )).first();
+                    
+                    if (animal == null) {
+                        sendError(exchange, 404, "Animal not found in your farm");
+                        return;
+                    }
+                    
+                    updates.put("animal", newAnimalId);
+                    updates.put("animal_name", animal.getString("name"));
+                    updates.remove("animal_id");
+                }
+                
+                // Build update document
+                Document updateDoc = new Document("updatedAt", new Date());
+                if (updates.get("vaccine_name") != null) updateDoc.append("vaccine_name", updates.get("vaccine_name"));
+                if (updates.get("vaccine_date") != null) updateDoc.append("vaccine_date", parseDate((String) updates.get("vaccine_date")));
+                if (updates.get("notes") != null) updateDoc.append("notes", updates.get("notes"));
+                if (updates.get("next_due_date") != null) {
+                    String nextDueDateStr = (String) updates.get("next_due_date");
+                    if (nextDueDateStr.isEmpty()) {
+                        updateDoc.append("next_due_date", null);
+                    } else {
+                        updateDoc.append("next_due_date", parseDate(nextDueDateStr));
+                    }
+                }
+                if (updates.get("animal") != null) updateDoc.append("animal", new ObjectId((String) updates.get("animal")));
+                if (updates.get("animal_name") != null) updateDoc.append("animal_name", updates.get("animal_name"));
+                
+                MongoCollection<Document> vaccines = database.getCollection("vaccines");
+                Document result = vaccines.findOneAndUpdate(
+                    and(eq("_id", new ObjectId(vaccineId)), eq("farmer", new ObjectId(farmerId))),
+                    new Document("$set", updateDoc),
+                    new com.mongodb.client.model.FindOneAndUpdateOptions().returnDocument(com.mongodb.client.model.ReturnDocument.AFTER)
+                );
+                
+                if (result == null) {
+                    sendError(exchange, 404, "Vaccine record not found");
+                    return;
+                }
+                
+                // Response with animal details
+                Map<String, Object> response = createVaccineResponse(result);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Vaccine record updated: " + vaccineId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to update vaccine record");
+            }
+        }
+        
+        // DELETE /api/vaccines/{id} - Delete vaccine record
+        private void handleDeleteVaccine(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Extract vaccine ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String vaccineId = path.substring(path.lastIndexOf('/') + 1);
+                
+                // Find and delete vaccine
+                MongoCollection<Document> vaccines = database.getCollection("vaccines");
+                Document vaccine = vaccines.find(and(
+                    eq("_id", new ObjectId(vaccineId)),
+                    eq("farmer", new ObjectId(farmerId))
+                )).first();
+                
+                if (vaccine == null) {
+                    sendError(exchange, 404, "Vaccine record not found");
+                    return;
+                }
+                
+                vaccines.deleteOne(and(
+                    eq("_id", new ObjectId(vaccineId)),
+                    eq("farmer", new ObjectId(farmerId))
+                ));
+                
+                // Response
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "Vaccine record deleted successfully");
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Vaccine record deleted: " + vaccineId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to delete vaccine record");
+            }
+        }
+        
+        // Helper method to create vaccine response with animal details
+        private Map<String, Object> createVaccineResponse(Document vaccine) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("_id", vaccine.getObjectId("_id").toString());
+            response.put("vaccine_name", vaccine.getString("vaccine_name"));
+            response.put("animal_name", vaccine.getString("animal_name"));
+            response.put("vaccine_date", vaccine.getDate("vaccine_date"));
+            response.put("notes", vaccine.getString("notes"));
+            response.put("next_due_date", vaccine.getDate("next_due_date"));
+            response.put("createdAt", vaccine.getDate("createdAt"));
+            
+            // Add animal details
+            ObjectId animalId = vaccine.getObjectId("animal");
+            if (animalId != null) {
+                MongoCollection<Document> animals = database.getCollection("animals");
+                Document animal = animals.find(eq("_id", animalId)).first();
+                if (animal != null) {
+                    Map<String, Object> animalData = new HashMap<>();
+                    animalData.put("_id", animal.getObjectId("_id").toString());
+                    animalData.put("name", animal.getString("name"));
+                    animalData.put("type", animal.getString("type"));
+                    animalData.put("breed", animal.getString("breed"));
+                    response.put("animal", animalData);
+                }
+            }
+            
+            return response;
         }
     }
 }

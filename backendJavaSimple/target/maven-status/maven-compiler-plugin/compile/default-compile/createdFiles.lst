@@ -1,5 +1,6 @@
 com\livestock360\backend\SimpleBackend$2.class
 com\livestock360\backend\SimpleBackend.class
+com\livestock360\backend\SimpleBackend$VaccineHandler.class
 com\livestock360\backend\SimpleBackend$EditProfileHandler.class
 com\livestock360\backend\SimpleBackend$SearchFarmersHandler.class
 com\livestock360\backend\SimpleBackend$AnimalHandler.class
