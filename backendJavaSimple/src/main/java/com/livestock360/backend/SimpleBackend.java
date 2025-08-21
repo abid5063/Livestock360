@@ -26,6 +26,8 @@ import org.bson.types.ObjectId;
 import static com.mongodb.client.model.Filters.*;
 import java.lang.reflect.Type;
 import com.google.gson.reflect.TypeToken;
+import java.text.SimpleDateFormat;
+import java.text.ParseException;
 
 public class SimpleBackend {
     private static MongoDatabase database;
@@ -57,6 +59,9 @@ public class SimpleBackend {
         // Animal routes
         server.createContext("/api/animals", new AnimalHandler());
         
+        // Task routes
+        server.createContext("/api/tasks", new TaskHandler());
+        
         server.setExecutor(null);
         server.start();
         
@@ -75,6 +80,13 @@ public class SimpleBackend {
         System.out.println("   GET  /api/animals/{id}");
         System.out.println("   PUT  /api/animals/{id}");
         System.out.println("   DELETE /api/animals/{id}");
+        System.out.println("   GET  /api/tasks");
+        System.out.println("   POST /api/tasks");
+        System.out.println("   GET  /api/tasks/{id}");
+        System.out.println("   PUT  /api/tasks/{id}");
+        System.out.println("   PATCH /api/tasks/{id}/toggle");
+        System.out.println("   DELETE /api/tasks/{id}");
+        System.out.println("   GET  /api/tasks/stats/overview");
     }
     
     static class CorsHandler implements HttpHandler {
@@ -1048,6 +1060,24 @@ public class SimpleBackend {
     }
     
     /**
+     * Helper method to parse date strings safely
+     */
+    private static Date parseDate(String dateString) {
+        try {
+            // Try ISO format first (YYYY-MM-DD)
+            if (dateString.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                java.time.LocalDate localDate = java.time.LocalDate.parse(dateString);
+                return Date.from(localDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+            }
+            // Try timestamp format
+            return new Date(Long.parseLong(dateString));
+        } catch (Exception e) {
+            // Fallback to current date
+            return new Date();
+        }
+    }
+    
+    /**
      * Enhanced authentication with JWT validation
      * @param exchange HTTP exchange containing headers
      * @return Farmer ID if authenticated, null if not
@@ -1122,6 +1152,601 @@ public class SimpleBackend {
             return MessageDigest.isEqual(hash, testHash);
         } catch (Exception e) {
             return false;
+        }
+    }
+    
+    /**
+     * Task Handler - handles all task-related operations
+     * Endpoints: GET, POST, PUT, PATCH, DELETE /api/tasks
+     */
+    static class TaskHandler implements HttpHandler {
+        public void handle(HttpExchange exchange) throws IOException {
+            // Add CORS headers
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(200, 0);
+                exchange.close();
+                return;
+            }
+            
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
+            
+            try {
+                // Route to appropriate handler based on method and path
+                if ("POST".equals(method) && "/api/tasks".equals(path)) {
+                    handleCreateTask(exchange);
+                } else if ("GET".equals(method) && "/api/tasks".equals(path)) {
+                    handleGetTasks(exchange);
+                } else if ("GET".equals(method) && path.matches("/api/tasks/stats/overview")) {
+                    handleGetTaskStats(exchange);
+                } else if ("GET".equals(method) && path.matches("/api/tasks/[a-f0-9]{24}")) {
+                    handleGetSingleTask(exchange);
+                } else if ("PUT".equals(method) && path.matches("/api/tasks/[a-f0-9]{24}")) {
+                    handleUpdateTask(exchange);
+                } else if ("PATCH".equals(method) && path.matches("/api/tasks/[a-f0-9]{24}/toggle")) {
+                    handleToggleTask(exchange);
+                } else if ("DELETE".equals(method) && path.matches("/api/tasks/[a-f0-9]{24}")) {
+                    handleDeleteTask(exchange);
+                } else {
+                    sendError(exchange, 404, "Task endpoint not found");
+                }
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // POST /api/tasks - Create a new task
+        private void handleCreateTask(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Read request body
+                InputStream inputStream = exchange.getRequestBody();
+                String body = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+                
+                // Parse JSON
+                Map<String, Object> request = gson.fromJson(body, objectMapType);
+                String title = (String) request.get("title");
+                String description = (String) request.get("description");
+                String dueDate = (String) request.get("dueDate");
+                String dueTime = (String) request.get("dueTime");
+                Object estimatedCostObj = request.get("estimatedCost");
+                String priority = (String) request.get("priority");
+                String category = (String) request.get("category");
+                String animalId = (String) request.get("animal");
+                String notes = (String) request.get("notes");
+                
+                // Validate required fields
+                if (title == null || dueDate == null || dueTime == null) {
+                    sendError(exchange, 400, "Please provide title, due date, and due time");
+                    return;
+                }
+                
+                // Validate time format (HH:MM)
+                if (!dueTime.matches("^([01]?[0-9]|2[0-3]):[0-5][0-9]$")) {
+                    sendError(exchange, 400, "Time must be in HH:MM format");
+                    return;
+                }
+                
+                // Validate animal exists and belongs to farmer if provided
+                if (animalId != null && !animalId.isEmpty()) {
+                    MongoCollection<Document> animals = database.getCollection("animals");
+                    Document animal = animals.find(and(
+                        eq("_id", new ObjectId(animalId)),
+                        eq("farmer", new ObjectId(farmerId))
+                    )).first();
+                    
+                    if (animal == null) {
+                        sendError(exchange, 400, "Animal not found in your farm");
+                        return;
+                    }
+                }
+                
+                // Parse estimated cost
+                double estimatedCost = 0.0;
+                if (estimatedCostObj != null) {
+                    if (estimatedCostObj instanceof Double) {
+                        estimatedCost = (Double) estimatedCostObj;
+                    } else if (estimatedCostObj instanceof Integer) {
+                        estimatedCost = ((Integer) estimatedCostObj).doubleValue();
+                    }
+                }
+                
+                // Create task document
+                Document task = new Document()
+                    .append("title", title)
+                    .append("description", description != null ? description : "")
+                    .append("dueDate", parseDate(dueDate))
+                    .append("dueTime", dueTime)
+                    .append("estimatedCost", estimatedCost)
+                    .append("priority", priority != null ? priority : "medium")
+                    .append("status", "pending")
+                    .append("category", category != null ? category : "other")
+                    .append("farmer", new ObjectId(farmerId))
+                    .append("isCompleted", false)
+                    .append("notes", notes != null ? notes : "")
+                    .append("createdAt", new Date())
+                    .append("updatedAt", new Date());
+                
+                if (animalId != null && !animalId.isEmpty()) {
+                    task.append("animal", new ObjectId(animalId));
+                }
+                
+                // Save to database
+                MongoCollection<Document> tasks = database.getCollection("tasks");
+                tasks.insertOne(task);
+                
+                // Prepare response with animal details if present
+                Map<String, Object> response = createTaskResponse(task);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(201, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Task created: " + title);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to create task");
+            }
+        }
+        
+        // GET /api/tasks - Get all tasks with optional filters
+        private void handleGetTasks(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Parse query parameters
+                String query = exchange.getRequestURI().getQuery();
+                Map<String, String> params = parseQueryParams(query);
+                
+                // Build MongoDB query
+                Document mongoQuery = new Document("farmer", new ObjectId(farmerId));
+                
+                if (params.get("status") != null) {
+                    mongoQuery.append("status", params.get("status"));
+                }
+                if (params.get("priority") != null) {
+                    mongoQuery.append("priority", params.get("priority"));
+                }
+                if (params.get("category") != null) {
+                    mongoQuery.append("category", params.get("category"));
+                }
+                if (params.get("animal") != null) {
+                    mongoQuery.append("animal", new ObjectId(params.get("animal")));
+                }
+                
+                // Date range filter
+                if (params.get("dateFrom") != null || params.get("dateTo") != null) {
+                    Document dateQuery = new Document();
+                    if (params.get("dateFrom") != null) {
+                        dateQuery.append("$gte", parseDate(params.get("dateFrom")));
+                    }
+                    if (params.get("dateTo") != null) {
+                        dateQuery.append("$lte", parseDate(params.get("dateTo")));
+                    }
+                    mongoQuery.append("dueDate", dateQuery);
+                }
+                
+                // Get tasks
+                MongoCollection<Document> tasks = database.getCollection("tasks");
+                List<Document> taskList = tasks.find(mongoQuery)
+                    .sort(new Document("dueDate", 1).append("dueTime", 1))
+                    .into(new ArrayList<>());
+                
+                // Convert to response format with animal details
+                List<Map<String, Object>> response = new ArrayList<>();
+                for (Document task : taskList) {
+                    response.add(createTaskResponse(task));
+                }
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved " + taskList.size() + " tasks for farmer: " + farmerId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to fetch tasks");
+            }
+        }
+        
+        // GET /api/tasks/{id} - Get single task
+        private void handleGetSingleTask(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Extract task ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String taskId = path.substring(path.lastIndexOf('/') + 1);
+                
+                // Validate ObjectId format
+                if (taskId.length() != 24 || !taskId.matches("[a-f0-9]{24}")) {
+                    sendError(exchange, 400, "Invalid task ID format");
+                    return;
+                }
+                
+                // Get task
+                MongoCollection<Document> tasks = database.getCollection("tasks");
+                Document task = tasks.find(and(
+                    eq("_id", new ObjectId(taskId)),
+                    eq("farmer", new ObjectId(farmerId))
+                )).first();
+                
+                if (task == null) {
+                    sendError(exchange, 404, "Task not found");
+                    return;
+                }
+                
+                // Response with animal details
+                Map<String, Object> response = createTaskResponse(task);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved task: " + taskId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to fetch task");
+            }
+        }
+        
+        // PUT /api/tasks/{id} - Update task
+        private void handleUpdateTask(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Extract task ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String taskId = path.substring(path.lastIndexOf('/') + 1);
+                
+                // Read request body
+                InputStream inputStream = exchange.getRequestBody();
+                String body = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+                
+                // Parse JSON
+                Map<String, Object> updates = gson.fromJson(body, objectMapType);
+                
+                // Validate animal exists and belongs to farmer if being updated
+                String animalId = (String) updates.get("animal");
+                if (animalId != null && !animalId.isEmpty()) {
+                    MongoCollection<Document> animals = database.getCollection("animals");
+                    Document animal = animals.find(and(
+                        eq("_id", new ObjectId(animalId)),
+                        eq("farmer", new ObjectId(farmerId))
+                    )).first();
+                    
+                    if (animal == null) {
+                        sendError(exchange, 400, "Animal not found in your farm");
+                        return;
+                    }
+                }
+                
+                // Build update document
+                Document updateDoc = new Document("updatedAt", new Date());
+                if (updates.get("title") != null) updateDoc.append("title", updates.get("title"));
+                if (updates.get("description") != null) updateDoc.append("description", updates.get("description"));
+                if (updates.get("dueDate") != null) updateDoc.append("dueDate", parseDate((String) updates.get("dueDate")));
+                if (updates.get("dueTime") != null) updateDoc.append("dueTime", updates.get("dueTime"));
+                if (updates.get("estimatedCost") != null) {
+                    Object costObj = updates.get("estimatedCost");
+                    double cost = costObj instanceof Double ? (Double) costObj : ((Integer) costObj).doubleValue();
+                    updateDoc.append("estimatedCost", cost);
+                }
+                if (updates.get("priority") != null) updateDoc.append("priority", updates.get("priority"));
+                if (updates.get("status") != null) updateDoc.append("status", updates.get("status"));
+                if (updates.get("category") != null) updateDoc.append("category", updates.get("category"));
+                if (updates.get("notes") != null) updateDoc.append("notes", updates.get("notes"));
+                if (updates.get("isCompleted") != null) {
+                    boolean isCompleted = (Boolean) updates.get("isCompleted");
+                    updateDoc.append("isCompleted", isCompleted);
+                    if (isCompleted) {
+                        updateDoc.append("completedAt", new Date());
+                        updateDoc.append("status", "completed");
+                    } else {
+                        updateDoc.append("completedAt", null);
+                    }
+                }
+                if (animalId != null) {
+                    if (animalId.isEmpty()) {
+                        updateDoc.append("animal", null);
+                    } else {
+                        updateDoc.append("animal", new ObjectId(animalId));
+                    }
+                }
+                
+                MongoCollection<Document> tasks = database.getCollection("tasks");
+                Document result = tasks.findOneAndUpdate(
+                    and(eq("_id", new ObjectId(taskId)), eq("farmer", new ObjectId(farmerId))),
+                    new Document("$set", updateDoc),
+                    new com.mongodb.client.model.FindOneAndUpdateOptions().returnDocument(com.mongodb.client.model.ReturnDocument.AFTER)
+                );
+                
+                if (result == null) {
+                    sendError(exchange, 404, "Task not found");
+                    return;
+                }
+                
+                // Response with animal details
+                Map<String, Object> response = createTaskResponse(result);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Task updated: " + taskId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to update task");
+            }
+        }
+        
+        // PATCH /api/tasks/{id}/toggle - Toggle task completion
+        private void handleToggleTask(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Extract task ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String taskId = path.split("/")[3]; // /api/tasks/{id}/toggle
+                
+                // Get current task
+                MongoCollection<Document> tasks = database.getCollection("tasks");
+                Document task = tasks.find(and(
+                    eq("_id", new ObjectId(taskId)),
+                    eq("farmer", new ObjectId(farmerId))
+                )).first();
+                
+                if (task == null) {
+                    sendError(exchange, 404, "Task not found");
+                    return;
+                }
+                
+                // Toggle completion
+                boolean currentStatus = task.getBoolean("isCompleted", false);
+                boolean newStatus = !currentStatus;
+                
+                Document updateDoc = new Document("isCompleted", newStatus)
+                    .append("updatedAt", new Date());
+                
+                if (newStatus) {
+                    updateDoc.append("completedAt", new Date())
+                             .append("status", "completed");
+                } else {
+                    updateDoc.append("completedAt", null);
+                    String currentStatusStr = task.getString("status");
+                    if ("completed".equals(currentStatusStr)) {
+                        updateDoc.append("status", "pending");
+                    }
+                }
+                
+                Document result = tasks.findOneAndUpdate(
+                    and(eq("_id", new ObjectId(taskId)), eq("farmer", new ObjectId(farmerId))),
+                    new Document("$set", updateDoc),
+                    new com.mongodb.client.model.FindOneAndUpdateOptions().returnDocument(com.mongodb.client.model.ReturnDocument.AFTER)
+                );
+                
+                // Response with animal details
+                Map<String, Object> response = createTaskResponse(result);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Task toggled: " + taskId + " -> " + newStatus);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to toggle task completion");
+            }
+        }
+        
+        // DELETE /api/tasks/{id} - Delete task
+        private void handleDeleteTask(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                // Extract task ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String taskId = path.substring(path.lastIndexOf('/') + 1);
+                
+                // Find and delete task
+                MongoCollection<Document> tasks = database.getCollection("tasks");
+                Document task = tasks.find(and(
+                    eq("_id", new ObjectId(taskId)),
+                    eq("farmer", new ObjectId(farmerId))
+                )).first();
+                
+                if (task == null) {
+                    sendError(exchange, 404, "Task not found");
+                    return;
+                }
+                
+                tasks.deleteOne(and(
+                    eq("_id", new ObjectId(taskId)),
+                    eq("farmer", new ObjectId(farmerId))
+                ));
+                
+                // Response
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "Task deleted successfully");
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Task deleted: " + taskId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to delete task");
+            }
+        }
+        
+        // GET /api/tasks/stats/overview - Get task statistics
+        private void handleGetTaskStats(HttpExchange exchange) throws IOException {
+            // Authenticate
+            String farmerId = authenticateRequest(exchange);
+            if (farmerId == null) {
+                sendError(exchange, 401, "Access denied. Invalid or expired token.");
+                return;
+            }
+            
+            try {
+                MongoCollection<Document> tasks = database.getCollection("tasks");
+                
+                // Get all tasks for the farmer
+                List<Document> allTasks = tasks.find(eq("farmer", new ObjectId(farmerId)))
+                    .into(new ArrayList<>());
+                
+                // Calculate statistics
+                int totalTasks = allTasks.size();
+                int completedTasks = 0;
+                int pendingTasks = 0;
+                double totalEstimatedCost = 0.0;
+                int overdueTasks = 0;
+                
+                Date now = new Date();
+                
+                for (Document task : allTasks) {
+                    boolean isCompleted = task.getBoolean("isCompleted", false);
+                    String status = task.getString("status");
+                    Date dueDate = task.getDate("dueDate");
+                    Double cost = task.getDouble("estimatedCost");
+                    
+                    if (isCompleted) completedTasks++;
+                    if ("pending".equals(status)) pendingTasks++;
+                    if (cost != null) totalEstimatedCost += cost;
+                    
+                    // Check if overdue (due date passed and not completed)
+                    if (dueDate != null && dueDate.before(now) && !isCompleted) {
+                        overdueTasks++;
+                    }
+                }
+                
+                // Response
+                Map<String, Object> stats = new HashMap<>();
+                stats.put("totalTasks", totalTasks);
+                stats.put("completedTasks", completedTasks);
+                stats.put("pendingTasks", pendingTasks);
+                stats.put("totalEstimatedCost", totalEstimatedCost);
+                stats.put("overdueTasks", overdueTasks);
+                
+                String jsonResponse = gson.toJson(stats);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Task stats retrieved for farmer: " + farmerId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Failed to fetch task statistics");
+            }
+        }
+        
+        // Helper method to create task response with animal details
+        private Map<String, Object> createTaskResponse(Document task) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("_id", task.getObjectId("_id").toString());
+            response.put("title", task.getString("title"));
+            response.put("description", task.getString("description"));
+            response.put("dueDate", task.getDate("dueDate"));
+            response.put("dueTime", task.getString("dueTime"));
+            response.put("estimatedCost", task.getDouble("estimatedCost"));
+            response.put("priority", task.getString("priority"));
+            response.put("status", task.getString("status"));
+            response.put("category", task.getString("category"));
+            response.put("isCompleted", task.getBoolean("isCompleted"));
+            response.put("notes", task.getString("notes"));
+            response.put("createdAt", task.getDate("createdAt"));
+            response.put("completedAt", task.getDate("completedAt"));
+            
+            // Add animal details if present
+            ObjectId animalId = task.getObjectId("animal");
+            if (animalId != null) {
+                MongoCollection<Document> animals = database.getCollection("animals");
+                Document animal = animals.find(eq("_id", animalId)).first();
+                if (animal != null) {
+                    Map<String, Object> animalData = new HashMap<>();
+                    animalData.put("_id", animal.getObjectId("_id").toString());
+                    animalData.put("name", animal.getString("name"));
+                    animalData.put("type", animal.getString("type"));
+                    animalData.put("breed", animal.getString("breed"));
+                    response.put("animal", animalData);
+                }
+            }
+            
+            return response;
+        }
+        
+        // Helper method to parse query parameters
+        private Map<String, String> parseQueryParams(String query) {
+            Map<String, String> params = new HashMap<>();
+            if (query != null) {
+                String[] pairs = query.split("&");
+                for (String pair : pairs) {
+                    String[] keyValue = pair.split("=");
+                    if (keyValue.length == 2) {
+                        params.put(keyValue[0], keyValue[1]);
+                    }
+                }
+            }
+            return params;
         }
     }
 }

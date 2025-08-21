@@ -12,7 +12,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { API_BASE_URL } from '../utils/apiConfig';
+import { API_BASE_URL, ALL_ALERTS } from '../utils/apiConfig';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
@@ -54,7 +54,9 @@ const TaskManagement = () => {
       calculateStats(response.data);
     } catch (error) {
       console.error('Error fetching tasks:', error);
-      Alert.alert(t('taskManagement.error'), t('taskManagement.failedToFetchTasks'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('taskManagement.error'), t('taskManagement.failedToFetchTasks'));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -109,35 +111,55 @@ const TaskManagement = () => {
       fetchTasks(); // Refresh tasks
     } catch (error) {
       console.error('Error toggling task:', error);
-      Alert.alert(t('taskManagement.error'), t('taskManagement.failedToUpdateTask'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('taskManagement.error'), t('taskManagement.failedToUpdateTask'));
+      }
     }
   };
 
   // Delete task with confirmation
   const deleteTask = (taskId) => {
-    Alert.alert(
-      t('taskManagement.deleteTask'),
-      t('taskManagement.deleteTaskMessage'),
-      [
-        { text: t('taskManagement.cancel'), style: 'cancel' },
-        {
-          text: t('taskManagement.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('authToken');
-              await axios.delete(`${API_BASE_URL}/api/tasks/${taskId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              fetchTasks(); // Refresh tasks
-            } catch (error) {
-              console.error('Error deleting task:', error);
-              Alert.alert(t('taskManagement.error'), t('taskManagement.failedToDeleteTask'));
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('taskManagement.deleteTask'),
+        t('taskManagement.deleteTaskMessage'),
+        [
+          { text: t('taskManagement.cancel'), style: 'cancel' },
+          {
+            text: t('taskManagement.delete'),
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const token = await AsyncStorage.getItem('authToken');
+                await axios.delete(`${API_BASE_URL}/api/tasks/${taskId}`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                fetchTasks(); // Refresh tasks
+              } catch (error) {
+                console.error('Error deleting task:', error);
+                if (ALL_ALERTS) {
+                  Alert.alert(t('taskManagement.error'), t('taskManagement.failedToDeleteTask'));
+                }
+              }
             }
           }
+        ]
+      );
+    } else {
+      // If alerts are disabled, directly delete without confirmation
+      const performDelete = async () => {
+        try {
+          const token = await AsyncStorage.getItem('authToken');
+          await axios.delete(`${API_BASE_URL}/api/tasks/${taskId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          fetchTasks(); // Refresh tasks
+        } catch (error) {
+          console.error('Error deleting task:', error);
         }
-      ]
-    );
+      };
+      performDelete();
+    }
   };
 
   // Format date for display

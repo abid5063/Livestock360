@@ -9,5 +9,6 @@ com\livestock360\backend\SimpleBackend$RefreshTokenHandler.class
 com\livestock360\backend\SimpleBackend$LoginHandler.class
 com\livestock360\backend\JwtUtil.class
 com\livestock360\backend\SimpleBackend$RegisterHandler.class
+com\livestock360\backend\SimpleBackend$TaskHandler.class
 com\livestock360\backend\SimpleBackend$1.class
 com\livestock360\backend\SimpleBackend$CorsHandler.class

@@ -1,0 +1,7 @@
+in this mobile\app\taskManagement.jsx file make the allert message be visible only if the ALL_ALERTS is true, just like in the mobile\app\animalDetails.jsx
+
+
+now read this file-backend\src\routes\taskRoutes.js carefully and implement the apis in it in the java backend. The new apis should be exactly same in name and the arguments. The functionality of the apis also should be identical.
+
+cd backendJavaSimple; mvn clean compile
+mvn exec:java
