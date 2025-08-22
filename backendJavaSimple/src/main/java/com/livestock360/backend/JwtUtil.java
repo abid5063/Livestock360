@@ -25,15 +25,34 @@ public class JwtUtil {
      * @param name The farmer's name
      * @return JWT token string
      */
+    /**
+     * Generate JWT token for farmers (backwards compatibility)
+     * @param farmerId User ID
+     * @param email User email
+     * @param name User name
+     * @return JWT token string
+     */
     public static String generateToken(String farmerId, String email, String name) {
+        return generateToken(farmerId, email, name, "farmer");
+    }
+    
+    /**
+     * Generate JWT token with user type
+     * @param userId User ID  
+     * @param email User email
+     * @param name User name
+     * @param userType User type ("farmer" or "vet")
+     * @return JWT token string
+     */
+    public static String generateToken(String userId, String email, String name, String userType) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + EXPIRATION_TIME);
         
         return Jwts.builder()
-                .setSubject(farmerId)  // Subject is the farmer ID
+                .setSubject(userId)  // Subject is the user ID
                 .claim("email", email)
                 .claim("name", name)
-                .claim("type", "farmer")
+                .claim("type", userType)
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
                 .setIssuer("livestock360-backend")
@@ -151,12 +170,16 @@ public class JwtUtil {
         
         // Refresh if less than 2 hours remaining
         if (remainingMinutes > 0 && remainingMinutes < 120) {
-            String farmerId = getFarmerIdFromToken(token);
-            String email = getEmailFromToken(token);
-            String name = getNameFromToken(token);
-            
-            if (farmerId != null && email != null && name != null) {
-                return generateToken(farmerId, email, name);
+            Claims claims = validateToken(token);
+            if (claims != null) {
+                String userId = claims.getSubject();
+                String email = (String) claims.get("email");
+                String name = (String) claims.get("name");
+                String userType = (String) claims.get("type");
+                
+                if (userId != null && email != null && name != null && userType != null) {
+                    return generateToken(userId, email, name, userType);
+                }
             }
         }
         

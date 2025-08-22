@@ -23,10 +23,12 @@ import java.util.Date;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import org.bson.types.ObjectId;
 import static com.mongodb.client.model.Filters.*;
 import java.lang.reflect.Type;
 import com.google.gson.reflect.TypeToken;
+import io.jsonwebtoken.Claims;
 
 public class SimpleBackend {
     private static MongoDatabase database;
@@ -69,6 +71,10 @@ public class SimpleBackend {
         
         // Vet routes
         server.createContext("/api/vets", new VetHandler());
+        
+        // Message routes
+        server.createContext("/api/messages", new MessageHandler());
+        server.createContext("/api/messages/fix-corrupt-data", new MessageDataFixHandler()); // Temporary fix endpoint
         
         server.setExecutor(null);
         server.start();
@@ -117,6 +123,15 @@ public class SimpleBackend {
         System.out.println("   GET  /api/vets/search");
         System.out.println("   PUT  /api/vets/edit/{id}");
         System.out.println("   DELETE /api/vets/delete/{id}");
+        System.out.println("   POST /api/messages");
+        System.out.println("   GET  /api/messages/conversation/{receiverId}/{receiverType}");
+        System.out.println("   GET  /api/messages/conversations");
+        System.out.println("   GET  /api/messages/vet");
+        System.out.println("   GET  /api/messages/farmer");
+        System.out.println("   PUT  /api/messages/{messageId}/read");
+        System.out.println("   DELETE /api/messages/{messageId}");
+        System.out.println("   GET  /api/messages/unread-count");
+        System.out.println("   GET  /api/messages/search");
     }
     
     static class CorsHandler implements HttpHandler {
@@ -2337,7 +2352,7 @@ public class SimpleBackend {
                 
                 // Generate JWT token
                 String vetId = vet.getObjectId("_id").toString();
-                String token = JwtUtil.generateToken(vetId, email, name);
+                String token = JwtUtil.generateToken(vetId, email, name, "vet");
                 
                 // Prepare response
                 Map<String, Object> vetData = new HashMap<>();
@@ -2413,7 +2428,7 @@ public class SimpleBackend {
                 String vetId = vet.getObjectId("_id").toString();
                 String vetName = vet.getString("name");
                 String vetEmail = vet.getString("email");
-                String token = JwtUtil.generateToken(vetId, vetEmail, vetName);
+                String token = JwtUtil.generateToken(vetId, vetEmail, vetName, "vet");
                 
                 // Prepare response
                 Map<String, Object> vetData = new HashMap<>();
@@ -2586,9 +2601,29 @@ public class SimpleBackend {
                     vetData.put("name", vet.getString("name"));
                     vetData.put("specialty", vet.getString("specialty"));
                     vetData.put("location", vet.getString("location"));
-                    vetData.put("rating", vet.getDouble("rating"));
+                    
+                    // Safe conversion for rating (can be Integer or Double)
+                    Object ratingObj = vet.get("rating");
+                    if (ratingObj instanceof Integer) {
+                        vetData.put("rating", ((Integer) ratingObj).doubleValue());
+                    } else if (ratingObj instanceof Double) {
+                        vetData.put("rating", ratingObj);
+                    } else {
+                        vetData.put("rating", 0.0);
+                    }
+                    
                     vetData.put("totalReviews", vet.getInteger("totalReviews"));
-                    vetData.put("consultationFee", vet.getDouble("consultationFee"));
+                    
+                    // Safe conversion for consultationFee (can be Integer or Double)
+                    Object feeObj = vet.get("consultationFee");
+                    if (feeObj instanceof Integer) {
+                        vetData.put("consultationFee", ((Integer) feeObj).doubleValue());
+                    } else if (feeObj instanceof Double) {
+                        vetData.put("consultationFee", feeObj);
+                    } else {
+                        vetData.put("consultationFee", 0.0);
+                    }
+                    
                     vetData.put("bio", vet.getString("bio"));
                     vetData.put("profileImage", vet.getString("profileImage"));
                     vetResults.add(vetData);
@@ -3610,6 +3645,982 @@ public class SimpleBackend {
                 }
             }
             return params;
+        }
+    }
+    
+    /**
+     * Message Handler - handles all message-related operations
+     * Endpoints: GET, POST, PUT, DELETE /api/messages/*
+     */
+    static class MessageHandler implements HttpHandler {
+        public void handle(HttpExchange exchange) throws IOException {
+            // Add CORS headers
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(200, 0);
+                exchange.close();
+                return;
+            }
+            
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
+            
+            System.out.println("🔍 Message API Request: " + method + " " + path);
+            
+            try {
+                // Route to appropriate handler based on method and path
+                if ("POST".equals(method) && "/api/messages".equals(path)) {
+                    handleSendMessage(exchange);
+                } else if ("GET".equals(method) && path.matches("/api/messages/conversation/[a-f0-9]{24}/(farmer|vet)")) {
+                    handleGetConversation(exchange);
+                } else if ("GET".equals(method) && "/api/messages/conversations".equals(path)) {
+                    handleGetConversations(exchange);
+                } else if ("GET".equals(method) && "/api/messages/vet".equals(path)) {
+                    handleGetVetMessages(exchange);
+                } else if ("GET".equals(method) && "/api/messages/farmer".equals(path)) {
+                    handleGetFarmerMessages(exchange);
+                } else if ("PUT".equals(method) && path.matches("/api/messages/[a-f0-9]{24}/read")) {
+                    handleMarkAsRead(exchange);
+                } else if ("DELETE".equals(method) && path.matches("/api/messages/[a-f0-9]{24}")) {
+                    handleDeleteMessage(exchange);
+                } else if ("GET".equals(method) && "/api/messages/unread-count".equals(path)) {
+                    handleGetUnreadCount(exchange);
+                } else if ("GET".equals(method) && "/api/messages/search".equals(path)) {
+                    handleSearchMessages(exchange);
+                } else {
+                    sendError(exchange, 404, "Message endpoint not found");
+                }
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // POST /api/messages - Send a message
+        private void handleSendMessage(HttpExchange exchange) throws IOException {
+            try {
+                // Authenticate user
+                Map<String, Object> authResult = authenticateUser(exchange);
+                if (authResult.containsKey("error")) {
+                    sendError(exchange, 401, (String) authResult.get("error"));
+                    return;
+                }
+                
+                String userId = (String) authResult.get("userId");
+                String userType = (String) authResult.get("userType");
+                
+                System.out.println("? Message API Request: POST /api/messages");
+                System.out.println("? Sender: " + userType + " " + userId);
+                
+                // Read request body
+                InputStream inputStream = exchange.getRequestBody();
+                String body = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+                
+                // Parse JSON
+                Map<String, Object> request = gson.fromJson(body, objectMapType);
+                String receiverId = (String) request.get("receiverId");
+                String receiverType = (String) request.get("receiverType");
+                String content = (String) request.get("content");
+                String messageType = (String) request.getOrDefault("messageType", "text");
+                String priority = (String) request.getOrDefault("priority", "normal");
+                
+                System.out.println("? Receiver: " + receiverType + " " + receiverId);
+                System.out.println("? Content: " + content);
+                
+                // Validation
+                if (receiverId == null || receiverType == null || content == null || content.trim().isEmpty()) {
+                    sendError(exchange, 400, "Receiver ID, receiver type, and content are required");
+                    return;
+                }
+                
+                if (!Arrays.asList("farmer", "vet").contains(receiverType)) {
+                    sendError(exchange, 400, "Invalid receiver type");
+                    return;
+                }
+                
+                // Verify receiver exists
+                MongoCollection<Document> receiverCollection = receiverType.equals("farmer") ? 
+                    database.getCollection("farmers") : database.getCollection("vets");
+                Document receiver = receiverCollection.find(eq("_id", new ObjectId(receiverId))).first();
+                
+                if (receiver == null) {
+                    sendError(exchange, 404, "Receiver not found");
+                    return;
+                }
+                
+                // Generate conversation ID (consistent for both participants)
+                List<String> participantIds = Arrays.asList(userId, receiverId);
+                Collections.sort(participantIds);
+                String conversationId = participantIds.get(0) + "_" + participantIds.get(1);
+                
+                // Create message document
+                Document message = new Document()
+                    .append("senderId", new ObjectId(userId))
+                    .append("senderType", userType)
+                    .append("receiverId", new ObjectId(receiverId))
+                    .append("receiverType", receiverType)
+                    .append("conversationId", conversationId)
+                    .append("content", content.trim())
+                    .append("messageType", messageType)
+                    .append("priority", priority)
+                    .append("isRead", false)
+                    .append("isDeleted", false)
+                    .append("createdAt", new Date())
+                    .append("updatedAt", new Date());
+                
+                // Save to database
+                MongoCollection<Document> messages = database.getCollection("messages");
+                messages.insertOne(message);
+                
+                // Get sender and receiver info for response
+                MongoCollection<Document> senderCollection = userType.equals("farmer") ? 
+                    database.getCollection("farmers") : database.getCollection("vets");
+                Document senderInfo = senderCollection.find(eq("_id", new ObjectId(userId))).first();
+                Document receiverInfo = receiver;
+                
+                if (senderInfo == null) {
+                    sendError(exchange, 404, "Sender not found in database");
+                    return;
+                }
+                
+                // Prepare response
+                Map<String, Object> responseMessage = new HashMap<>();
+                responseMessage.put("_id", message.getObjectId("_id").toString());
+                responseMessage.put("senderId", userId);
+                responseMessage.put("senderType", userType);
+                responseMessage.put("receiverId", receiverId);
+                responseMessage.put("receiverType", receiverType);
+                responseMessage.put("conversationId", conversationId);
+                responseMessage.put("content", content.trim());
+                responseMessage.put("messageType", messageType);
+                responseMessage.put("priority", priority);
+                responseMessage.put("isRead", false);
+                responseMessage.put("createdAt", message.getDate("createdAt"));
+                
+                Map<String, Object> senderData = new HashMap<>();
+                senderData.put("name", senderInfo.getString("name"));
+                senderData.put("email", senderInfo.getString("email"));
+                if (userType.equals("vet")) {
+                    senderData.put("specialty", senderInfo.getString("specialty"));
+                }
+                responseMessage.put("senderInfo", senderData);
+                
+                Map<String, Object> receiverData = new HashMap<>();
+                receiverData.put("name", receiverInfo.getString("name"));
+                receiverData.put("email", receiverInfo.getString("email"));
+                if (receiverType.equals("vet")) {
+                    receiverData.put("specialty", receiverInfo.getString("specialty"));
+                }
+                responseMessage.put("receiverInfo", receiverData);
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("message", "Message sent successfully");
+                response.put("data", responseMessage);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(201, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Message sent from " + userType + " " + userId + " to " + receiverType + " " + receiverId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // GET /api/messages/conversation/{receiverId}/{receiverType} - Get conversation
+        private void handleGetConversation(HttpExchange exchange) throws IOException {
+            try {
+                // Authenticate user
+                Map<String, Object> authResult = authenticateUser(exchange);
+                if (authResult.containsKey("error")) {
+                    sendError(exchange, 401, (String) authResult.get("error"));
+                    return;
+                }
+                
+                String userId = (String) authResult.get("userId");
+                String userType = (String) authResult.get("userType");
+                
+                // Extract parameters from URL
+                String path = exchange.getRequestURI().getPath();
+                String[] pathParts = path.split("/");
+                String receiverId = pathParts[4];
+                String receiverType = pathParts[5];
+                
+                // Parse query parameters
+                String query = exchange.getRequestURI().getQuery();
+                Map<String, String> params = parseQueryParams(query);
+                int page = Integer.parseInt(params.getOrDefault("page", "1"));
+                int limit = Integer.parseInt(params.getOrDefault("limit", "50"));
+                
+                // Generate conversation ID
+                List<String> participantIds = Arrays.asList(userId, receiverId);
+                Collections.sort(participantIds);
+                String conversationId = participantIds.get(0) + "_" + participantIds.get(1);
+                
+                // Get messages from database
+                MongoCollection<Document> messages = database.getCollection("messages");
+                List<Document> messageList = messages.find(eq("conversationId", conversationId))
+                    .sort(new Document("createdAt", -1))
+                    .limit(limit)
+                    .skip((page - 1) * limit)
+                    .into(new ArrayList<>());
+                
+                // Mark messages as read (messages received by current user)
+                messages.updateMany(
+                    and(
+                        eq("conversationId", conversationId),
+                        eq("receiverId", new ObjectId(userId)),
+                        eq("receiverType", userType),
+                        eq("isRead", false)
+                    ),
+                    new Document("$set", new Document("isRead", true).append("updatedAt", new Date()))
+                );
+                
+                // Get participant info and validate receiver exists
+                MongoCollection<Document> participantCollection = receiverType.equals("farmer") ? 
+                    database.getCollection("farmers") : database.getCollection("vets");
+                Document participantInfo = participantCollection.find(eq("_id", new ObjectId(receiverId))).first();
+                
+                // Validate that the receiver exists in the specified collection
+                if (participantInfo == null) {
+                    sendError(exchange, 404, "Receiver not found or invalid receiver type");
+                    return;
+                }
+                
+                // Convert messages to response format
+                List<Map<String, Object>> responseMessages = new ArrayList<>();
+                for (Document msg : messageList) {
+                    Map<String, Object> messageData = new HashMap<>();
+                    messageData.put("_id", msg.getObjectId("_id").toString());
+                    messageData.put("senderId", msg.getObjectId("senderId").toString());
+                    messageData.put("senderType", msg.getString("senderType"));
+                    messageData.put("receiverId", msg.getObjectId("receiverId").toString());
+                    messageData.put("receiverType", msg.getString("receiverType"));
+                    messageData.put("content", msg.getString("content"));
+                    messageData.put("messageType", msg.getString("messageType"));
+                    messageData.put("isRead", msg.getBoolean("isRead"));
+                    messageData.put("createdAt", msg.getDate("createdAt"));
+                    responseMessages.add(messageData);
+                    
+                    // Debug: log message details
+                    System.out.println("? Message: " + msg.getString("content") + 
+                                     " (from " + msg.getString("senderType") + " " + msg.getObjectId("senderId").toString() + 
+                                     " to " + msg.getString("receiverType") + " " + msg.getObjectId("receiverId").toString() + ")");
+                }
+                
+                // Prepare participant info
+                Map<String, Object> participant = new HashMap<>();
+                participant.put("name", participantInfo.getString("name"));
+                participant.put("email", participantInfo.getString("email"));
+                participant.put("phoneNo", participantInfo.getString("phoneNo"));
+                if (receiverType.equals("vet")) {
+                    participant.put("specialty", participantInfo.getString("specialty"));
+                }
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("messages", responseMessages);
+                response.put("participant", participant);
+                
+                Map<String, Object> pagination = new HashMap<>();
+                pagination.put("current", page);
+                pagination.put("limit", limit);
+                pagination.put("hasMore", messageList.size() == limit);
+                response.put("pagination", pagination);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved conversation between " + userType + " " + userId + " and " + receiverType + " " + receiverId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // GET /api/messages/conversations - Get user's conversations list
+        private void handleGetConversations(HttpExchange exchange) throws IOException {
+            try {
+                // Authenticate user
+                Map<String, Object> authResult = authenticateUser(exchange);
+                if (authResult.containsKey("error")) {
+                    sendError(exchange, 401, (String) authResult.get("error"));
+                    return;
+                }
+                
+                String userId = (String) authResult.get("userId");
+                String userType = (String) authResult.get("userType");
+                
+                System.out.println("? Message API Request: GET /api/messages/conversations");
+                System.out.println("? Requesting user: " + userType + " " + userId);
+                
+                // Get user's conversations using aggregation
+                MongoCollection<Document> messages = database.getCollection("messages");
+                
+                // Aggregation pipeline to get latest message per conversation
+                List<Document> pipeline = Arrays.asList(
+                    new Document("$match", new Document("$or", Arrays.asList(
+                        new Document("senderId", new ObjectId(userId)).append("senderType", userType),
+                        new Document("receiverId", new ObjectId(userId)).append("receiverType", userType)
+                    )).append("isDeleted", false)),
+                    new Document("$sort", new Document("createdAt", -1)),
+                    new Document("$group", new Document("_id", "$conversationId")
+                        .append("lastMessage", new Document("$first", "$$ROOT"))
+                        .append("totalMessages", new Document("$sum", 1))
+                        .append("unreadCount", new Document("$sum", 
+                            new Document("$cond", Arrays.asList(
+                                new Document("$and", Arrays.asList(
+                                    new Document("$eq", Arrays.asList("$receiverId", new ObjectId(userId))),
+                                    new Document("$eq", Arrays.asList("$receiverType", userType)),
+                                    new Document("$eq", Arrays.asList("$isRead", false))
+                                )),
+                                1,
+                                0
+                            ))
+                        ))
+                    ),
+                    new Document("$sort", new Document("lastMessage.createdAt", -1))
+                );
+                
+                List<Document> conversations = messages.aggregate(pipeline).into(new ArrayList<>());
+                
+                // Process conversations and get participant info
+                List<Map<String, Object>> responseConversations = new ArrayList<>();
+                for (Document conv : conversations) {
+                    Document lastMessage = (Document) conv.get("lastMessage");
+                    
+                    // Determine the other participant
+                    boolean isUserSender = lastMessage.getObjectId("senderId").toString().equals(userId);
+                    String otherUserId = isUserSender ? 
+                        lastMessage.getObjectId("receiverId").toString() : 
+                        lastMessage.getObjectId("senderId").toString();
+                    String otherUserType = isUserSender ? 
+                        lastMessage.getString("receiverType") : 
+                        lastMessage.getString("senderType");
+                    
+                    System.out.println("? Last message details: senderId=" + lastMessage.getObjectId("senderId").toString() + 
+                                     ", receiverId=" + lastMessage.getObjectId("receiverId").toString() + 
+                                     ", senderType=" + lastMessage.getString("senderType") + 
+                                     ", receiverType=" + lastMessage.getString("receiverType"));
+                    System.out.println("? Current user: " + userType + " " + userId + ", isUserSender=" + isUserSender);
+                    System.out.println("? Processing conversation - Other participant: " + otherUserType + " " + otherUserId);
+                    
+                    // Additional validation to ensure we're not using the same user as participant
+                    if (otherUserId.equals(userId)) {
+                        System.out.println("? ERROR: Other participant ID is same as current user ID! Skipping conversation.");
+                        continue;
+                    }
+                    
+                    // Get participant info
+                    MongoCollection<Document> participantCollection = otherUserType.equals("farmer") ? 
+                        database.getCollection("farmers") : database.getCollection("vets");
+                    Document participantInfo = participantCollection.find(eq("_id", new ObjectId(otherUserId))).first();
+                    
+                    if (participantInfo != null) {
+                        Map<String, Object> participant = new HashMap<>();
+                        participant.put("id", otherUserId);
+                        participant.put("name", participantInfo.getString("name"));
+                        participant.put("email", participantInfo.getString("email"));
+                        participant.put("phoneNo", participantInfo.getString("phoneNo"));
+                        participant.put("type", otherUserType); // Add participant type
+                        if (otherUserType.equals("vet")) {
+                            participant.put("specialty", participantInfo.getString("specialty"));
+                        }
+                        
+                        System.out.println("? Conversation participant - ID: " + otherUserId + ", Type: " + otherUserType + ", Name: " + participantInfo.getString("name"));
+                        
+                        Map<String, Object> lastMsg = new HashMap<>();
+                        lastMsg.put("content", lastMessage.getString("content"));
+                        lastMsg.put("timestamp", lastMessage.getDate("createdAt"));
+                        lastMsg.put("isFromUser", isUserSender);
+                        lastMsg.put("messageType", lastMessage.getString("messageType"));
+                        
+                        Map<String, Object> conversation = new HashMap<>();
+                        conversation.put("conversationId", conv.getString("_id"));
+                        conversation.put("participant", participant);
+                        conversation.put("lastMessage", lastMsg);
+                        conversation.put("unreadCount", conv.getInteger("unreadCount"));
+                        conversation.put("totalMessages", conv.getInteger("totalMessages"));
+                        
+                        responseConversations.add(conversation);
+                    }
+                }
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("conversations", responseConversations);
+                
+                String jsonResponse = gson.toJson(response);
+                System.out.println("? Conversations JSON response: " + jsonResponse);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved " + responseConversations.size() + " conversations for " + userType + " " + userId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // GET /api/messages/vet - Get messages for vet dashboard
+        private void handleGetVetMessages(HttpExchange exchange) throws IOException {
+            try {
+                // Authenticate user
+                Map<String, Object> authResult = authenticateUser(exchange);
+                if (authResult.containsKey("error")) {
+                    sendError(exchange, 401, (String) authResult.get("error"));
+                    return;
+                }
+                
+                String userId = (String) authResult.get("userId");
+                String userType = (String) authResult.get("userType");
+                
+                if (!"vet".equals(userType)) {
+                    sendError(exchange, 403, "Access denied");
+                    return;
+                }
+                
+                // Parse query parameters
+                String query = exchange.getRequestURI().getQuery();
+                Map<String, String> params = parseQueryParams(query);
+                int limit = Integer.parseInt(params.getOrDefault("limit", "10"));
+                
+                // Get recent unread messages for the vet
+                MongoCollection<Document> messages = database.getCollection("messages");
+                List<Document> messageList = messages.find(
+                    and(
+                        eq("receiverId", new ObjectId(userId)),
+                        eq("receiverType", "vet"),
+                        eq("isRead", false),
+                        eq("isDeleted", false)
+                    )
+                ).sort(new Document("createdAt", -1))
+                .limit(limit)
+                .into(new ArrayList<>());
+                
+                // Get sender info for each message
+                List<Map<String, Object>> dashboardMessages = new ArrayList<>();
+                for (Document msg : messageList) {
+                    String senderId = msg.getObjectId("senderId").toString();
+                    String senderType = msg.getString("senderType");
+                    
+                    MongoCollection<Document> senderCollection = senderType.equals("farmer") ? 
+                        database.getCollection("farmers") : database.getCollection("vets");
+                    Document senderInfo = senderCollection.find(eq("_id", new ObjectId(senderId))).first();
+                    
+                    if (senderInfo != null) {
+                        Map<String, Object> dashboardMessage = new HashMap<>();
+                        dashboardMessage.put("id", msg.getObjectId("_id").toString());
+                        if (senderType.equals("farmer")) {
+                            dashboardMessage.put("farmerName", senderInfo.getString("name"));
+                        } else {
+                            dashboardMessage.put("vetName", senderInfo.getString("name"));
+                        }
+                        dashboardMessage.put("content", msg.getString("content"));
+                        dashboardMessage.put("timestamp", msg.getDate("createdAt"));
+                        dashboardMessage.put("read", msg.getBoolean("isRead"));
+                        dashboardMessage.put("priority", msg.getString("priority"));
+                        
+                        dashboardMessages.add(dashboardMessage);
+                    }
+                }
+                
+                String jsonResponse = gson.toJson(dashboardMessages);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved " + dashboardMessages.size() + " vet dashboard messages for " + userId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // GET /api/messages/farmer - Get messages for farmer dashboard
+        private void handleGetFarmerMessages(HttpExchange exchange) throws IOException {
+            try {
+                // Authenticate user
+                Map<String, Object> authResult = authenticateUser(exchange);
+                if (authResult.containsKey("error")) {
+                    sendError(exchange, 401, (String) authResult.get("error"));
+                    return;
+                }
+                
+                String userId = (String) authResult.get("userId");
+                String userType = (String) authResult.get("userType");
+                
+                if (!"farmer".equals(userType)) {
+                    sendError(exchange, 403, "Access denied");
+                    return;
+                }
+                
+                // Parse query parameters
+                String query = exchange.getRequestURI().getQuery();
+                Map<String, String> params = parseQueryParams(query);
+                int limit = Integer.parseInt(params.getOrDefault("limit", "10"));
+                
+                // Get recent unread messages for the farmer
+                MongoCollection<Document> messages = database.getCollection("messages");
+                List<Document> messageList = messages.find(
+                    and(
+                        eq("receiverId", new ObjectId(userId)),
+                        eq("receiverType", "farmer"),
+                        eq("isRead", false),
+                        eq("isDeleted", false)
+                    )
+                ).sort(new Document("createdAt", -1))
+                .limit(limit)
+                .into(new ArrayList<>());
+                
+                // Get sender info for each message
+                List<Map<String, Object>> dashboardMessages = new ArrayList<>();
+                for (Document msg : messageList) {
+                    String senderId = msg.getObjectId("senderId").toString();
+                    String senderType = msg.getString("senderType");
+                    
+                    MongoCollection<Document> senderCollection = senderType.equals("farmer") ? 
+                        database.getCollection("farmers") : database.getCollection("vets");
+                    Document senderInfo = senderCollection.find(eq("_id", new ObjectId(senderId))).first();
+                    
+                    if (senderInfo != null) {
+                        Map<String, Object> dashboardMessage = new HashMap<>();
+                        dashboardMessage.put("id", msg.getObjectId("_id").toString());
+                        if (senderType.equals("vet")) {
+                            dashboardMessage.put("vetName", senderInfo.getString("name"));
+                            dashboardMessage.put("vetSpecialty", senderInfo.getString("specialty"));
+                        } else {
+                            dashboardMessage.put("farmerName", senderInfo.getString("name"));
+                        }
+                        dashboardMessage.put("content", msg.getString("content"));
+                        dashboardMessage.put("timestamp", msg.getDate("createdAt"));
+                        dashboardMessage.put("read", msg.getBoolean("isRead"));
+                        dashboardMessage.put("priority", msg.getString("priority"));
+                        
+                        dashboardMessages.add(dashboardMessage);
+                    }
+                }
+                
+                String jsonResponse = gson.toJson(dashboardMessages);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved " + dashboardMessages.size() + " farmer dashboard messages for " + userId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // PUT /api/messages/{messageId}/read - Mark message as read
+        private void handleMarkAsRead(HttpExchange exchange) throws IOException {
+            try {
+                // Authenticate user
+                Map<String, Object> authResult = authenticateUser(exchange);
+                if (authResult.containsKey("error")) {
+                    sendError(exchange, 401, (String) authResult.get("error"));
+                    return;
+                }
+                
+                String userId = (String) authResult.get("userId");
+                String userType = (String) authResult.get("userType");
+                
+                // Extract message ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String messageId = path.split("/")[3];
+                
+                // Find and update message
+                MongoCollection<Document> messages = database.getCollection("messages");
+                Document message = messages.find(eq("_id", new ObjectId(messageId))).first();
+                
+                if (message == null) {
+                    sendError(exchange, 404, "Message not found");
+                    return;
+                }
+                
+                // Check if user is the receiver of this message
+                if (!message.getObjectId("receiverId").toString().equals(userId) || 
+                    !message.getString("receiverType").equals(userType)) {
+                    sendError(exchange, 403, "Access denied");
+                    return;
+                }
+                
+                // Mark as read
+                messages.updateOne(
+                    eq("_id", new ObjectId(messageId)),
+                    new Document("$set", new Document("isRead", true).append("updatedAt", new Date()))
+                );
+                
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "Message marked as read");
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Message " + messageId + " marked as read by " + userType + " " + userId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // DELETE /api/messages/{messageId} - Delete message
+        private void handleDeleteMessage(HttpExchange exchange) throws IOException {
+            try {
+                // Authenticate user
+                Map<String, Object> authResult = authenticateUser(exchange);
+                if (authResult.containsKey("error")) {
+                    sendError(exchange, 401, (String) authResult.get("error"));
+                    return;
+                }
+                
+                String userId = (String) authResult.get("userId");
+                String userType = (String) authResult.get("userType");
+                
+                // Extract message ID from URL
+                String path = exchange.getRequestURI().getPath();
+                String messageId = path.split("/")[3];
+                
+                // Find message
+                MongoCollection<Document> messages = database.getCollection("messages");
+                Document message = messages.find(eq("_id", new ObjectId(messageId))).first();
+                
+                if (message == null) {
+                    sendError(exchange, 404, "Message not found");
+                    return;
+                }
+                
+                // Check if user is the sender of this message
+                if (!message.getObjectId("senderId").toString().equals(userId) || 
+                    !message.getString("senderType").equals(userType)) {
+                    sendError(exchange, 403, "Access denied. You can only delete your own messages.");
+                    return;
+                }
+                
+                // Soft delete (mark as deleted)
+                messages.updateOne(
+                    eq("_id", new ObjectId(messageId)),
+                    new Document("$set", new Document("isDeleted", true).append("updatedAt", new Date()))
+                );
+                
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "Message deleted successfully");
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Message " + messageId + " deleted by " + userType + " " + userId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // GET /api/messages/unread-count - Get unread message count
+        private void handleGetUnreadCount(HttpExchange exchange) throws IOException {
+            try {
+                // Authenticate user
+                Map<String, Object> authResult = authenticateUser(exchange);
+                if (authResult.containsKey("error")) {
+                    sendError(exchange, 401, (String) authResult.get("error"));
+                    return;
+                }
+                
+                String userId = (String) authResult.get("userId");
+                String userType = (String) authResult.get("userType");
+                
+                // Count unread messages
+                MongoCollection<Document> messages = database.getCollection("messages");
+                long unreadCount = messages.countDocuments(
+                    and(
+                        eq("receiverId", new ObjectId(userId)),
+                        eq("receiverType", userType),
+                        eq("isRead", false),
+                        eq("isDeleted", false)
+                    )
+                );
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("unreadCount", unreadCount);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Retrieved unread count " + unreadCount + " for " + userType + " " + userId);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // GET /api/messages/search - Search messages
+        private void handleSearchMessages(HttpExchange exchange) throws IOException {
+            try {
+                // Authenticate user
+                Map<String, Object> authResult = authenticateUser(exchange);
+                if (authResult.containsKey("error")) {
+                    sendError(exchange, 401, (String) authResult.get("error"));
+                    return;
+                }
+                
+                String userId = (String) authResult.get("userId");
+                String userType = (String) authResult.get("userType");
+                
+                // Parse query parameters
+                String query = exchange.getRequestURI().getQuery();
+                Map<String, String> params = parseQueryParams(query);
+                String searchQuery = params.get("q");
+                String type = params.get("type");
+                int page = Integer.parseInt(params.getOrDefault("page", "1"));
+                int limit = Integer.parseInt(params.getOrDefault("limit", "20"));
+                
+                if (searchQuery == null || searchQuery.trim().isEmpty()) {
+                    sendError(exchange, 400, "Search query is required");
+                    return;
+                }
+                
+                // Build search criteria
+                Document searchCriteria = new Document("$or", Arrays.asList(
+                    new Document("senderId", new ObjectId(userId)).append("senderType", userType),
+                    new Document("receiverId", new ObjectId(userId)).append("receiverType", userType)
+                )).append("content", new Document("$regex", searchQuery).append("$options", "i"))
+                .append("isDeleted", false);
+                
+                if (type != null && !type.trim().isEmpty()) {
+                    searchCriteria.append("messageType", type);
+                }
+                
+                // Search messages
+                MongoCollection<Document> messages = database.getCollection("messages");
+                List<Document> searchResults = messages.find(searchCriteria)
+                    .sort(new Document("createdAt", -1))
+                    .limit(limit)
+                    .skip((page - 1) * limit)
+                    .into(new ArrayList<>());
+                
+                long total = messages.countDocuments(searchCriteria);
+                
+                // Convert to response format
+                List<Map<String, Object>> responseMessages = new ArrayList<>();
+                for (Document msg : searchResults) {
+                    Map<String, Object> messageData = new HashMap<>();
+                    messageData.put("_id", msg.getObjectId("_id").toString());
+                    messageData.put("senderId", msg.getObjectId("senderId").toString());
+                    messageData.put("senderType", msg.getString("senderType"));
+                    messageData.put("receiverId", msg.getObjectId("receiverId").toString());
+                    messageData.put("receiverType", msg.getString("receiverType"));
+                    messageData.put("content", msg.getString("content"));
+                    messageData.put("messageType", msg.getString("messageType"));
+                    messageData.put("isRead", msg.getBoolean("isRead"));
+                    messageData.put("createdAt", msg.getDate("createdAt"));
+                    responseMessages.add(messageData);
+                }
+                
+                Map<String, Object> pagination = new HashMap<>();
+                pagination.put("current", page);
+                pagination.put("pages", Math.ceil((double) total / limit));
+                pagination.put("total", total);
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("messages", responseMessages);
+                response.put("pagination", pagination);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("✅ Search returned " + responseMessages.size() + " messages for query: " + searchQuery);
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
+        }
+        
+        // Helper method to authenticate user and get user info
+        private Map<String, Object> authenticateUser(HttpExchange exchange) {
+            Map<String, Object> result = new HashMap<>();
+            
+            try {
+                String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+                if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                    System.out.println("? Authentication failed: No token provided");
+                    result.put("error", "Access denied. No token provided.");
+                    return result;
+                }
+                
+                String token = authHeader.substring(7);
+                Claims claims = JwtUtil.validateToken(token);
+                
+                if (claims == null) {
+                    System.out.println("? Authentication failed: Invalid or expired token");
+                    result.put("error", "Invalid or expired token");
+                    return result;
+                }
+                
+                String userId = claims.getSubject();
+                String userType = (String) claims.get("type");
+                
+                System.out.println("? JWT Authentication successful for " + userType + ": " + userId);
+                
+                if (userId == null || userType == null) {
+                    System.out.println("? Authentication failed: Invalid token format - userId=" + userId + ", userType=" + userType);
+                    result.put("error", "Invalid token format");
+                    return result;
+                }
+                
+                result.put("userId", userId);
+                result.put("userType", userType);
+                return result;
+                
+            } catch (Exception e) {
+                System.out.println("? Authentication exception: " + e.getMessage());
+                result.put("error", "Authentication failed");
+                return result;
+            }
+        }
+        
+        // Helper method to parse query parameters
+        private Map<String, String> parseQueryParams(String query) {
+            Map<String, String> params = new HashMap<>();
+            if (query != null) {
+                String[] pairs = query.split("&");
+                for (String pair : pairs) {
+                    String[] keyValue = pair.split("=");
+                    if (keyValue.length == 2) {
+                        try {
+                            params.put(keyValue[0], java.net.URLDecoder.decode(keyValue[1], "UTF-8"));
+                        } catch (Exception e) {
+                            params.put(keyValue[0], keyValue[1]);
+                        }
+                    }
+                }
+            }
+            return params;
+        }
+    }
+    
+    // Temporary handler to fix corrupted message data
+    static class MessageDataFixHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("POST".equals(exchange.getRequestMethod())) {
+                fixCorruptedMessageData(exchange);
+            } else {
+                sendError(exchange, 405, "Method not allowed");
+            }
+        }
+        
+        private void fixCorruptedMessageData(HttpExchange exchange) throws IOException {
+            try {
+                System.out.println("? Starting message data corruption fix...");
+                
+                MongoCollection<Document> messages = database.getCollection("messages");
+                MongoCollection<Document> farmers = database.getCollection("farmers");
+                MongoCollection<Document> vets = database.getCollection("vets");
+                
+                // Get all messages
+                List<Document> allMessages = messages.find().into(new ArrayList<>());
+                int fixedCount = 0;
+                
+                for (Document message : allMessages) {
+                    String senderId = message.getObjectId("senderId").toString();
+                    String currentSenderType = message.getString("senderType");
+                    String receiverId = message.getObjectId("receiverId").toString();
+                    String currentReceiverType = message.getString("receiverType");
+                    
+                    // Check actual sender type
+                    String actualSenderType = null;
+                    if (farmers.find(eq("_id", new ObjectId(senderId))).first() != null) {
+                        actualSenderType = "farmer";
+                    } else if (vets.find(eq("_id", new ObjectId(senderId))).first() != null) {
+                        actualSenderType = "vet";
+                    }
+                    
+                    // Check actual receiver type
+                    String actualReceiverType = null;
+                    if (farmers.find(eq("_id", new ObjectId(receiverId))).first() != null) {
+                        actualReceiverType = "farmer";
+                    } else if (vets.find(eq("_id", new ObjectId(receiverId))).first() != null) {
+                        actualReceiverType = "vet";
+                    }
+                    
+                    // Fix if incorrect
+                    boolean needsUpdate = false;
+                    Document updateDoc = new Document();
+                    
+                    if (actualSenderType != null && !actualSenderType.equals(currentSenderType)) {
+                        updateDoc.append("senderType", actualSenderType);
+                        needsUpdate = true;
+                        System.out.println("? Fixing sender type for message " + message.getObjectId("_id") + 
+                                         ": " + currentSenderType + " -> " + actualSenderType);
+                    }
+                    
+                    if (actualReceiverType != null && !actualReceiverType.equals(currentReceiverType)) {
+                        updateDoc.append("receiverType", actualReceiverType);
+                        needsUpdate = true;
+                        System.out.println("? Fixing receiver type for message " + message.getObjectId("_id") + 
+                                         ": " + currentReceiverType + " -> " + actualReceiverType);
+                    }
+                    
+                    if (needsUpdate) {
+                        messages.updateOne(
+                            eq("_id", message.getObjectId("_id")),
+                            new Document("$set", updateDoc)
+                        );
+                        fixedCount++;
+                    }
+                }
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("message", "Message data fix completed");
+                response.put("fixedMessages", fixedCount);
+                
+                String jsonResponse = gson.toJson(response);
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+                
+                System.out.println("? Message data fix completed. Fixed " + fixedCount + " messages.");
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                sendError(exchange, 500, "Internal server error");
+            }
         }
     }
 }

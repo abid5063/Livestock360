@@ -168,7 +168,7 @@ export default function VetMessaging() {
         return;
       }
       
-      const response = await axios.post(
+      await axios.post(
         `${API_BASE_URL}/api/messages`,
         {
           receiverId: participantId,
