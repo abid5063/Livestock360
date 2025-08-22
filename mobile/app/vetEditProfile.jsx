@@ -3,7 +3,7 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityInd
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from "axios";
-import { API_BASE_URL } from "../utils/apiConfig";
+import { API_BASE_URL, ALL_ALERTS } from "../utils/apiConfig";
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
 export default function VetEditProfile() {
@@ -17,6 +17,11 @@ export default function VetEditProfile() {
   }, [language, i18n]);
 
   const vet = params.vet ? JSON.parse(params.vet) : null;
+
+  // Debug the vet object
+  console.log("🔍 VetEditProfile vet object:", JSON.stringify(vet, null, 2));
+  console.log("🔍 Vet _id:", vet?._id);
+  console.log("🔍 Vet id:", vet?.id);
 
   const [formData, setFormData] = useState({
     name: vet?.name || "",
@@ -39,83 +44,143 @@ export default function VetEditProfile() {
       !formData.email.trim() ||
       !formData.specialty.trim()
     ) {
-      Alert.alert(t('vetEditProfile.validation'), t('vetEditProfile.fillRequiredFields'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('vetEditProfile.validation'), t('vetEditProfile.fillRequiredFields'));
+      }
       return;
     }
-    Alert.alert(
-      t('vetEditProfile.saveChanges'),
-      t('vetEditProfile.saveChangesMessage'),
-      [
-        { text: t('vetEditProfile.cancel'), style: "cancel" },
-        {
-          text: t('vetEditProfile.save'),
-          style: "default",
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const token = await AsyncStorage.getItem('authToken');
-              await axios.put(
-                `${API_BASE_URL}/api/vets/edit/${vet._id}`,
-                formData,
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('vetEditProfile.saveChanges'),
+        t('vetEditProfile.saveChangesMessage'),
+        [
+          { text: t('vetEditProfile.cancel'), style: "cancel" },
+          {
+            text: t('vetEditProfile.save'),
+            style: "default",
+            onPress: async () => {
+              try {
+                setLoading(true);
+                const token = await AsyncStorage.getItem('authToken');
+                await axios.put(
+                  `${API_BASE_URL}/api/vets/edit/${vet._id || vet.id}`,
+                  formData,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      'Content-Type': 'application/json'
+                    }
                   }
+                );
+                // Update the stored user data
+                const updatedVetData = { ...vet, ...formData };
+                await AsyncStorage.setItem('userData', JSON.stringify(updatedVetData));
+                if (ALL_ALERTS) {
+                  Alert.alert(t('vetEditProfile.success'), t('vetEditProfile.profileUpdated'));
                 }
-              );
-              // Update the stored user data
-              const updatedVetData = { ...vet, ...formData };
-              await AsyncStorage.setItem('userData', JSON.stringify(updatedVetData));
-              Alert.alert(t('vetEditProfile.success'), t('vetEditProfile.profileUpdated'));
-              router.replace({
-                pathname: '/vetProfile',
-                params: { vet: JSON.stringify(updatedVetData) }
-              });
-            } catch (error) {
-              Alert.alert(t('vetEditProfile.error'), error.response?.data?.message || t('vetEditProfile.failedToUpdate'));
-            } finally {
-              setLoading(false);
+                router.replace({
+                  pathname: '/vetProfile',
+                  params: { vet: JSON.stringify(updatedVetData) }
+                });
+              } catch (error) {
+                if (ALL_ALERTS) {
+                  Alert.alert(t('vetEditProfile.error'), error.response?.data?.message || t('vetEditProfile.failedToUpdate'));
+                }
+              } finally {
+                setLoading(false);
+              }
             }
           }
+        ]
+      );
+    } else {
+      // If alerts are disabled, save directly without confirmation
+      const performSave = async () => {
+        try {
+          setLoading(true);
+          const token = await AsyncStorage.getItem('authToken');
+          await axios.put(
+            `${API_BASE_URL}/api/vets/edit/${vet._id || vet.id}`,
+            formData,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+          // Update the stored user data
+          const updatedVetData = { ...vet, ...formData };
+          await AsyncStorage.setItem('userData', JSON.stringify(updatedVetData));
+          router.replace({
+            pathname: '/vetProfile',
+            params: { vet: JSON.stringify(updatedVetData) }
+          });
+        } catch (error) {
+          console.error('Error updating profile:', error);
+        } finally {
+          setLoading(false);
         }
-      ]
-    );
+      };
+      performSave();
+    }
   };
 
-  const handleDeleteProfile = async () => {
-    Alert.alert(
-      t('vetEditProfile.deleteProfile'),
-      t('vetEditProfile.deleteProfileMessage'),
-      [
-        { text: t('vetEditProfile.cancel'), style: "cancel" },
-        {
-          text: t('vetEditProfile.delete'),
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const token = await AsyncStorage.getItem('authToken');
-              await axios.delete(
-                `${API_BASE_URL}/api/vets/delete/${vet._id}`,
-                {
+  const handleDeleteProfile = () => {
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('vetEditProfile.deleteAccount'),
+        t('vetEditProfile.deleteAccountMessage'),
+        [
+          { text: t('vetEditProfile.cancel'), style: "cancel" },
+          {
+            text: t('vetEditProfile.delete'),
+            style: "destructive",
+            onPress: async () => {
+              try {
+                setLoading(true);
+                const token = await AsyncStorage.getItem('authToken');
+                await axios.delete(`${API_BASE_URL}/api/vets/delete/${vet._id || vet.id}`, {
                   headers: {
-                    Authorization: `Bearer ${token}`
+                    Authorization: `Bearer ${token}`,
                   }
+                });
+                // Clear storage and navigate to auth
+                await AsyncStorage.multiRemove(['authToken', 'userData']);
+                router.replace('/vetAuth');
+              } catch (error) {
+                if (ALL_ALERTS) {
+                  Alert.alert(t('vetEditProfile.error'), error.response?.data?.message || t('vetEditProfile.failedToDelete'));
                 }
-              );
-              await AsyncStorage.multiRemove(['authToken', 'userData']);
-              Alert.alert(t('vetEditProfile.deleted'), t('vetEditProfile.profileDeleted'));
-              router.replace('/');
-            } catch (error) {
-              Alert.alert(t('vetEditProfile.error'), error.response?.data?.message || t('vetEditProfile.failedToDelete'));
-            } finally {
-              setLoading(false);
+              } finally {
+                setLoading(false);
+              }
             }
           }
+        ]
+      );
+    } else {
+      // If alerts are disabled, delete directly without confirmation
+      const performDelete = async () => {
+        try {
+          setLoading(true);
+          const token = await AsyncStorage.getItem('authToken');
+          await axios.delete(`${API_BASE_URL}/api/vets/delete/${vet._id || vet.id}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            }
+          });
+          // Clear storage and navigate to auth
+          await AsyncStorage.multiRemove(['authToken', 'userData']);
+          router.replace('/vetAuth');
+        } catch (error) {
+          console.error('Error deleting profile:', error);
+        } finally {
+          setLoading(false);
         }
-      ]
-    );
+      };
+      performDelete();
+    }
   };
 
   if (!vet) {

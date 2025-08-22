@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useLocalSearchParams } from "expo-router";
 import axios from "axios";
-import { API_BASE_URL } from "../utils/apiConfig"; // Adjust the import path as needed
+import { API_BASE_URL, ALL_ALERTS } from "../utils/apiConfig"; // Adjust the import path as needed
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
 const { width } = Dimensions.get('window');
@@ -117,7 +117,9 @@ export default function VetProfile() {
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
       if (error.response?.status === 401) {
-        Alert.alert("Session Expired", "Please login again");
+        if (ALL_ALERTS) {
+          Alert.alert("Session Expired", "Please login again");
+        }
         await AsyncStorage.multiRemove(['authToken', 'userData']);
         router.replace('/');
       }
@@ -131,25 +133,35 @@ export default function VetProfile() {
   };
 
   const handleLogout = async () => {
-    Alert.alert(
-      t('vetProfile.signOut'),
-      t('vetProfile.signOutMessage'),
-      [
-        { text: t('vetProfile.cancel'), style: 'cancel' },
-        {
-          text: t('vetProfile.logOut'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await AsyncStorage.multiRemove(['authToken', 'userData']);
-              router.replace('/');
-            } catch (error) {
-              console.error('Error during logout:', error);
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('vetProfile.signOut'),
+        t('vetProfile.signOutMessage'),
+        [
+          { text: t('vetProfile.cancel'), style: 'cancel' },
+          {
+            text: t('vetProfile.logOut'),
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await AsyncStorage.multiRemove(['authToken', 'userData']);
+                router.replace('/');
+              } catch (error) {
+                console.error('Error during logout:', error);
+              }
             }
           }
-        }
-      ]
-    );
+        ]
+      );
+    } else {
+      // If alerts are disabled, logout directly without confirmation
+      try {
+        await AsyncStorage.multiRemove(['authToken', 'userData']);
+        router.replace('/');
+      } catch (error) {
+        console.error('Error during logout:', error);
+      }
+    }
   };
 
   const handleAppointmentAction = async (appointmentId, action) => {
@@ -161,10 +173,14 @@ export default function VetProfile() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       fetchDashboardData(); // Refresh data
-      Alert.alert(t('vetProfile.success'), t('vetProfile.appointmentActionSuccess', { action }));
+      if (ALL_ALERTS) {
+        Alert.alert(t('vetProfile.success'), t('vetProfile.appointmentActionSuccess', { action }));
+      }
     } catch (error) {
       console.error("Error updating appointment:", error);
-      Alert.alert(t('vetProfile.error'), t('vetProfile.failedToUpdateAppointment'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('vetProfile.error'), t('vetProfile.failedToUpdateAppointment'));
+      }
     }
   };
 
@@ -182,7 +198,9 @@ export default function VetProfile() {
       setShowMessages(true);
     } catch (error) {
       console.error("Error fetching conversation:", error);
-      Alert.alert(t('vetProfile.error'), t('vetProfile.failedToLoadConversation'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('vetProfile.error'), t('vetProfile.failedToLoadConversation'));
+      }
     }
   };
 
@@ -214,7 +232,9 @@ export default function VetProfile() {
       
     } catch (error) {
       console.error("Error sending message:", error);
-      Alert.alert(t('vetProfile.error'), t('vetProfile.failedToSendMessage'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('vetProfile.error'), t('vetProfile.failedToSendMessage'));
+      }
     }
   };
 
@@ -243,7 +263,11 @@ export default function VetProfile() {
       icon: "medical",
       color: "#821105ff",
       count: appointments.filter(a => a.priority === 'emergency').length,
-      onPress: () => Alert.alert("Emergency", "Emergency cases feature coming soon"),
+      onPress: () => {
+        if (ALL_ALERTS) {
+          Alert.alert("Emergency", "Emergency cases feature coming soon");
+        }
+      },
       testID: "emergency-card"
     },
     {

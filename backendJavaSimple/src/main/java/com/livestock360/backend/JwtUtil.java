@@ -99,6 +99,19 @@ public class JwtUtil {
     }
     
     /**
+     * Extract user type from JWT token
+     * @param token JWT token string
+     * @return User type ("farmer" or "vet") if valid token, null if invalid
+     */
+    public static String getUserTypeFromToken(String token) {
+        Claims claims = validateToken(token);
+        if (claims != null) {
+            return (String) claims.get("type");
+        }
+        return null;
+    }
+    
+    /**
      * Check if token is expired
      * @param token JWT token string
      * @return true if expired, false if still valid
