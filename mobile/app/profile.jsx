@@ -656,7 +656,7 @@ export default function Profile() {
                 <Ionicons name="call" size={20} color="#4a89dc" />
               </View>
               <Text style={styles.detailText}>
-                {farmer.phoneNo || "Phone not specified"}
+                {farmer.phone || farmer.phoneNo || "Phone not specified"}
               </Text>
             </View>
           </View>

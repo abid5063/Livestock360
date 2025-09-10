@@ -26,7 +26,7 @@ export default function EditProfile() {
   const [formData, setFormData] = useState({
     name: farmer?.name || "",
     email: farmer?.email || "",
-    phoneNo: farmer?.phoneNo || "",
+    phoneNo: farmer?.phoneNo || farmer?.phone || "",
     location: farmer?.location || "",
     profileImage: farmer?.profileImage || "",
   });

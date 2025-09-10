@@ -334,11 +334,15 @@ public class AuthController {
 
             // Create new farmer
             System.out.println("Creating new farmer...");
+            // Handle both phone and phoneNo fields for compatibility
+            String phoneValue = request.getPhone() != null ? request.getPhone() : 
+                               (request.getPhoneNo() != null ? request.getPhoneNo() : "");
+            
             Farmer farmer = farmerService.createFarmer(
                 request.getName(),
                 request.getEmail(),
                 request.getPassword(),
-                request.getPhone() != null ? request.getPhone() : "",
+                phoneValue,
                 request.getLocation() != null ? request.getLocation() : "",
                 request.getAddress() != null ? request.getAddress() : "",
                 request.getProfilePicture() != null ? request.getProfilePicture() : ""
@@ -401,11 +405,15 @@ public class AuthController {
         }
 
         // Create new vet
+        // Handle both phone and phoneNo fields for compatibility
+        String phoneValue = request.getPhone() != null ? request.getPhone() : 
+                           (request.getPhoneNo() != null ? request.getPhoneNo() : "");
+        
         Vet vet = vetService.createVet(
             request.getName(),
             request.getEmail(),
             request.getPassword(),
-            request.getPhone() != null ? request.getPhone() : "",
+            phoneValue,
             request.getLocation() != null ? request.getLocation() : "",
             request.getAddress() != null ? request.getAddress() : "",
             request.getProfilePicture() != null ? request.getProfilePicture() : "",
@@ -553,8 +561,10 @@ public class AuthController {
         if (request.getName() != null && !request.getName().trim().isEmpty()) {
             farmer.setName(request.getName());
         }
-        if (request.getPhone() != null) {
-            farmer.setPhone(request.getPhone());
+        // Handle both phone and phoneNo fields for compatibility
+        String phoneValue = request.getPhone() != null ? request.getPhone() : request.getPhoneNo();
+        if (phoneValue != null) {
+            farmer.setPhone(phoneValue);
         }
         if (request.getLocation() != null) {
             farmer.setLocation(request.getLocation());
@@ -607,8 +617,10 @@ public class AuthController {
         if (request.getName() != null && !request.getName().trim().isEmpty()) {
             vet.setName(request.getName());
         }
-        if (request.getPhone() != null) {
-            vet.setPhone(request.getPhone());
+        // Handle both phone and phoneNo fields for compatibility
+        String phoneValue = request.getPhone() != null ? request.getPhone() : request.getPhoneNo();
+        if (phoneValue != null) {
+            vet.setPhone(phoneValue);
         }
         if (request.getLocation() != null) {
             vet.setLocation(request.getLocation());
