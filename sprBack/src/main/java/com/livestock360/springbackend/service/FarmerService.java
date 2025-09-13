@@ -14,8 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Pattern;
 
 @Service
@@ -124,6 +123,65 @@ public class FarmerService {
             return farmers;
         } catch (Exception e) {
             System.out.println("Error searching farmers: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Search farmers with projection - exactly like SimpleBackend
+     * Returns only specific fields: _id, name, location, profileImage, phoneNo
+     */
+    public List<Map<String, Object>> searchFarmersWithProjection(String searchTerm) {
+        try {
+            MongoCollection<Document> collection = getFarmersCollection();
+            List<Map<String, Object>> farmers = new ArrayList<>();
+            
+            List<Document> farmerList;
+            
+            if (searchTerm == null || searchTerm.trim().isEmpty()) {
+                // Return first 20 farmers with projection when search is empty - exactly like SimpleBackend
+                farmerList = collection.find()
+                    .projection(new Document("name", 1)
+                        .append("location", 1)
+                        .append("profileImage", 1)
+                        .append("phoneNo", 1))
+                    .limit(20)
+                    .into(new ArrayList<>());
+            } else {
+                // Search by name or location (case insensitive) - exactly like SimpleBackend
+                Document searchQuery = new Document("$or", 
+                    Arrays.asList(
+                        new Document("name", new Document("$regex", searchTerm).append("$options", "i")),
+                        new Document("location", new Document("$regex", searchTerm).append("$options", "i"))
+                    )
+                );
+                
+                farmerList = collection.find(searchQuery)
+                    .projection(new Document("name", 1)
+                        .append("location", 1)
+                        .append("profileImage", 1)
+                        .append("phoneNo", 1))
+                    .limit(20)
+                    .into(new ArrayList<>());
+            }
+            
+            // Convert to response format - exactly like SimpleBackend
+            for (Document farmer : farmerList) {
+                Map<String, Object> farmerData = new HashMap<>();
+                farmerData.put("_id", farmer.getObjectId("_id").toString());
+                farmerData.put("name", farmer.getString("name"));
+                farmerData.put("location", farmer.getString("location"));
+                farmerData.put("profileImage", farmer.getString("profileImage"));
+                farmerData.put("phoneNo", farmer.getString("phoneNo"));
+                farmers.add(farmerData);
+            }
+            
+            System.out.println("✅ Farmers search completed: " + farmers.size() + " results");
+            return farmers;
+            
+        } catch (Exception e) {
+            System.out.println("Error searching farmers with projection: " + e.getMessage());
+            e.printStackTrace();
             return new ArrayList<>();
         }
     }

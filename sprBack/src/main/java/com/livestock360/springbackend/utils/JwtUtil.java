@@ -23,17 +23,32 @@ public class JwtUtil {
     }
 
     /**
-     * Generate JWT token for farmers
+     * Generate JWT token for farmers (backwards compatibility)
      */
     public String generateToken(String farmerId, String farmerName, String email) {
+        return generateToken(farmerId, email, farmerName, "farmer");
+    }
+
+    /**
+     * Generate JWT token with user type - matches SimpleBackend exactly
+     */
+    public static String generateToken(String userId, String email, String name, String userType) {
+        String SECRET = "mysecretkeythatislongenoughforjwthmacsha256algorithm";
+        SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes());
+        long EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours
+        
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + EXPIRATION_TIME);
+        
         return Jwts.builder()
-                .setSubject(farmerId)
-                .claim("name", farmerName)
+                .setSubject(userId)
                 .claim("email", email)
-                .claim("userType", "farmer")
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .claim("name", name)
+                .claim("type", userType)
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
+                .setIssuer("livestock360-backend")
+                .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }
 
@@ -41,15 +56,48 @@ public class JwtUtil {
      * Generate JWT token for vets
      */
     public String generateTokenForVet(String vetId, String vetName, String email) {
-        return Jwts.builder()
-                .setSubject(vetId)
-                .claim("name", vetName)
-                .claim("email", email)
-                .claim("userType", "vet")
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
-                .compact();
+        return generateToken(vetId, email, vetName, "vet");
+    }
+
+    /**
+     * Extract user ID from JWT token - matches SimpleBackend
+     */
+    public static String getUserIdFromToken(String token) {
+        Claims claims = validateTokenStatic(token);
+        if (claims != null) {
+            return claims.getSubject();
+        }
+        return null;
+    }
+
+    /**
+     * Extract user type from JWT token - matches SimpleBackend
+     */
+    public static String getUserTypeFromToken(String token) {
+        Claims claims = validateTokenStatic(token);
+        if (claims != null) {
+            return (String) claims.get("type");
+        }
+        return null;
+    }
+
+    /**
+     * Validate JWT token and extract claims - static version for SimpleBackend compatibility
+     */
+    public static Claims validateTokenStatic(String token) {
+        try {
+            String SECRET = "mysecretkeythatislongenoughforjwthmacsha256algorithm";
+            SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes());
+            
+            return Jwts.parserBuilder()
+                    .setSigningKey(key)
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+        } catch (JwtException | IllegalArgumentException e) {
+            System.err.println("Invalid JWT token: " + e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -151,6 +199,23 @@ public class JwtUtil {
         } catch (Exception e) {
             System.out.println("Error refreshing token: " + e.getMessage());
             return null;
+        }
+    }
+    
+    public static boolean isTokenExpiredStatic(String token) {
+        try {
+            // Use the same secret as defined in the static methods
+            String SECRET = "mysecretkeythatislongenoughforjwthmacsha256algorithm";
+            SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes());
+            Claims claims = Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+            
+            return claims.getExpiration().before(new Date());
+        } catch (Exception e) {
+            return true; // Consider expired if parsing fails
         }
     }
 }

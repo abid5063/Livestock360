@@ -10,6 +10,10 @@ public class RegisterRequest {
     private String address;
     private String profilePicture;
     private String specialization; // For vets only
+    private String specialty; // For vets only (support both)
+    private String licenseNumber; // For vets only
+    private String experience; // For vets only
+    private String profileImage; // For profile pictures
     private Double latitude; // For vets only
     private Double longitude; // For vets only
 
@@ -103,5 +107,37 @@ public class RegisterRequest {
 
     public void setLongitude(Double longitude) {
         this.longitude = longitude;
+    }
+
+    public String getSpecialty() {
+        return specialty;
+    }
+
+    public void setSpecialty(String specialty) {
+        this.specialty = specialty;
+    }
+
+    public String getLicenseNumber() {
+        return licenseNumber;
+    }
+
+    public void setLicenseNumber(String licenseNumber) {
+        this.licenseNumber = licenseNumber;
+    }
+
+    public String getExperience() {
+        return experience;
+    }
+
+    public void setExperience(String experience) {
+        this.experience = experience;
+    }
+
+    public String getProfileImage() {
+        return profileImage;
+    }
+
+    public void setProfileImage(String profileImage) {
+        this.profileImage = profileImage;
     }
 }

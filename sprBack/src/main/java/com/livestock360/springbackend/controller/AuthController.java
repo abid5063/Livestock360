@@ -265,27 +265,25 @@ public class AuthController {
     }
 
     @GetMapping("/farmers/search")
-    public ResponseEntity<String> searchFarmers(@RequestParam String query) {
+    public ResponseEntity<String> searchFarmers(@RequestParam(required = false, defaultValue = "") String search) {
         try {
-            System.out.println("Search farmers request received for query: " + query);
+            System.out.println("Search farmers request received for search term: '" + search + "'");
 
-            List<Farmer> farmers = farmerService.searchFarmers(query);
+            List<Map<String, Object>> farmers = farmerService.searchFarmersWithProjection(search);
             
-            JsonObject response = new JsonObject();
-            response.addProperty("success", true);
-            response.addProperty("message", "Farmers retrieved successfully");
-            response.add("farmers", gson.toJsonTree(farmers));
+            // Response format exactly like SimpleBackend
+            Map<String, Object> response = new HashMap<>();
+            response.put("farmers", farmers);
             
-            return ResponseEntity.ok(response.toString());
+            return ResponseEntity.ok(gson.toJson(response));
 
         } catch (Exception e) {
             System.out.println("Search farmers error: " + e.getMessage());
             e.printStackTrace();
             
-            JsonObject response = new JsonObject();
-            response.addProperty("success", false);
-            response.addProperty("message", "Internal server error during farmer search");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response.toString());
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Internal server error");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(gson.toJson(errorResponse));
         }
     }
 

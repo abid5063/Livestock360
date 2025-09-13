@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Alert, StyleSheet, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { API_BASE_URL } from '../utils/apiConfig';
+import { API_BASE_URL, ALL_ALERTS } from '../utils/apiConfig';
 import axios from 'axios';
 import { router } from 'expo-router';
 import { useLanguage } from '../utils/LanguageContext';
@@ -34,36 +34,54 @@ export default function FarmerAppointmentManagement() {
       const data = await response.json();
       // If response has appointments array, use it
       setAppointments(Array.isArray(data.appointments) ? data.appointments : data);
-    } catch (error) {
-      Alert.alert(t('farmerAppointmentManagement.error'), t('farmerAppointmentManagement.failedToLoad'));
+    } catch (_error) {
+      if (ALL_ALERTS) {
+        Alert.alert(t('farmerAppointmentManagement.error'), t('farmerAppointmentManagement.failedToLoad'));
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (appointmentId) => {
-    Alert.alert(
-      t('farmerAppointmentManagement.deleteAppointment'),
-      t('farmerAppointmentManagement.deleteAppointmentMessage'),
-      [
-        { text: t('farmerAppointmentManagement.cancel'), style: 'cancel' },
-        {
-          text: t('farmerAppointmentManagement.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('authToken');
-              await axios.delete(`${API_BASE_URL}/api/appointments/remove/${appointmentId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              setAppointments(appointments.filter(a => a._id !== appointmentId));
-            } catch (error) {
-              Alert.alert(t('farmerAppointmentManagement.error'), t('farmerAppointmentManagement.failedToDelete'));
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('farmerAppointmentManagement.deleteAppointment'),
+        t('farmerAppointmentManagement.deleteAppointmentMessage'),
+        [
+          { text: t('farmerAppointmentManagement.cancel'), style: 'cancel' },
+          {
+            text: t('farmerAppointmentManagement.delete'),
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const token = await AsyncStorage.getItem('authToken');
+                await axios.delete(`${API_BASE_URL}/api/appointments/remove/${appointmentId}`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                setAppointments(appointments.filter(a => a._id !== appointmentId));
+              } catch (_error) {
+                if (ALL_ALERTS) {
+                  Alert.alert(t('farmerAppointmentManagement.error'), t('farmerAppointmentManagement.failedToDelete'));
+                }
+              }
             }
           }
-        }
-      ]
-    );
+        ]
+      );
+    } else {
+      // If alerts are disabled, directly delete without confirmation
+      try {
+        const token = await AsyncStorage.getItem('authToken');
+        await axios.delete(`${API_BASE_URL}/api/appointments/remove/${appointmentId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setAppointments(appointments.filter(a => a._id !== appointmentId));
+      } catch (error) {
+        // Silently handle error when alerts are disabled
+        console.log('Failed to delete appointment:', error);
+      }
+    }
   };
 
   const renderItem = ({ item }) => (

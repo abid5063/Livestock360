@@ -15,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import axios from 'axios';
-import { API_BASE_URL } from '../utils/apiConfig';
+import { API_BASE_URL, ALL_ALERTS } from '../utils/apiConfig';
 import { useCallback } from 'react';
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
@@ -93,7 +93,9 @@ const AppointmentManagement = () => {
       console.error('Error loading appointments:', error);
       console.error('Error response:', error.response?.data);
       setAppointments([]); // Set empty array on error
-      Alert.alert(t('appointmentManagement.error'), t('appointmentManagement.failedToLoad'));
+      if (ALL_ALERTS) {
+        Alert.alert(t('appointmentManagement.error'), t('appointmentManagement.failedToLoad'));
+      }
     }
   };
 
@@ -104,112 +106,190 @@ const AppointmentManagement = () => {
   };
 
   const updateAppointmentStatus = async (appointmentId, newStatus) => {
-    Alert.alert(
-      newStatus === 'accepted' ? t('appointmentManagement.confirmAppointment') : t('appointmentManagement.completeAppointment'),
-      newStatus === 'accepted'
-        ? t('appointmentManagement.confirmAppointmentMessage')
-        : t('appointmentManagement.completeAppointmentMessage'),
-      [
-        { text: t('appointmentManagement.cancel'), style: 'cancel' },
-        {
-          text: newStatus === 'accepted' ? t('appointmentManagement.confirmButton') : t('appointmentManagement.completeButton'),
-          style: 'default',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('authToken');
-              await axios.put(`${API_BASE_URL}/api/appointments/${appointmentId}`, 
-                { status: newStatus },
-                { headers: { Authorization: `Bearer ${token}` }}
-              );
-              loadAppointments();
-            } catch (error) {
-              console.error('Error updating appointment:', error);
-              Alert.alert(t('appointmentManagement.error'), t('appointmentManagement.failedToUpdate'));
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const cancelAndRemoveAppointment = async (appointmentId) => {
-    Alert.alert(
-      t('appointmentManagement.cancelAppointment'),
-      t('appointmentManagement.cancelAppointmentMessage'),
-      [
-        { text: t('appointmentManagement.cancel'), style: 'cancel' },
-        {
-          text: t('appointmentManagement.yesCancel'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('Attempting to cancel appointment:', appointmentId);
-              const token = await AsyncStorage.getItem('authToken');
-              console.log('Token exists:', !!token);
-              // Try using PUT route to set status to cancelled (more reliable than DELETE)
-              const response = await axios.put(`${API_BASE_URL}/api/appointments/${appointmentId}`, 
-                { 
-                  status: 'cancelled',
-                  vetNotes: 'Cancelled by vet from appointment management'
-                },
-                { headers: { Authorization: `Bearer ${token}` }}
-              );
-              console.log('Cancel response:', response.data);
-              loadAppointments();
-              Alert.alert(t('appointmentManagement.success'), t('appointmentManagement.appointmentCancelled'));
-            } catch (error) {
-              console.error('Error cancelling appointment:', error);
-              console.error('Error response:', error.response?.data);
-              // If PUT fails, try the DELETE route as fallback
+    if (ALL_ALERTS) {
+      Alert.alert(
+        newStatus === 'accepted' ? t('appointmentManagement.confirmAppointment') : t('appointmentManagement.completeAppointment'),
+        newStatus === 'accepted'
+          ? t('appointmentManagement.confirmAppointmentMessage')
+          : t('appointmentManagement.completeAppointmentMessage'),
+        [
+          { text: t('appointmentManagement.cancel'), style: 'cancel' },
+          {
+            text: newStatus === 'accepted' ? t('appointmentManagement.confirmButton') : t('appointmentManagement.completeButton'),
+            style: 'default',
+            onPress: async () => {
               try {
-                console.log('Trying DELETE route as fallback...');
-                const deleteResponse = await axios({
-                  method: 'delete',
-                  url: `${API_BASE_URL}/api/appointments/${appointmentId}`,
-                  headers: { Authorization: `Bearer ${token}` },
-                  data: { reason: 'Cancelled by vet from appointment management' }
-                });
-                console.log('Delete response:', deleteResponse.data);
+                const token = await AsyncStorage.getItem('authToken');
+                await axios.put(`${API_BASE_URL}/api/appointments/${appointmentId}`, 
+                  { status: newStatus },
+                  { headers: { Authorization: `Bearer ${token}` }}
+                );
                 loadAppointments();
-                Alert.alert(t('appointmentManagement.success'), t('appointmentManagement.appointmentCancelled'));
-              } catch (deleteError) {
-                console.error('Both PUT and DELETE failed:', deleteError);
-                Alert.alert(t('appointmentManagement.error'), deleteError.response?.data?.message || t('appointmentManagement.failedToCancel'));
+              } catch (error) {
+                console.error('Error updating appointment:', error);
+                if (ALL_ALERTS) {
+                  Alert.alert(t('appointmentManagement.error'), t('appointmentManagement.failedToUpdate'));
+                }
               }
             }
           }
+        ]
+      );
+    } else {
+      // If alerts are disabled, directly update status without confirmation
+      try {
+        const token = await AsyncStorage.getItem('authToken');
+        await axios.put(`${API_BASE_URL}/api/appointments/${appointmentId}`, 
+          { status: newStatus },
+          { headers: { Authorization: `Bearer ${token}` }}
+        );
+        loadAppointments();
+      } catch (error) {
+        console.error('Error updating appointment:', error);
+      }
+    }
+  };
+
+  const cancelAndRemoveAppointment = async (appointmentId) => {
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('appointmentManagement.cancelAppointment'),
+        t('appointmentManagement.cancelAppointmentMessage'),
+        [
+          { text: t('appointmentManagement.cancel'), style: 'cancel' },
+          {
+            text: t('appointmentManagement.yesCancel'),
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                console.log('Attempting to cancel appointment:', appointmentId);
+                const token = await AsyncStorage.getItem('authToken');
+                console.log('Token exists:', !!token);
+                // Try using PUT route to set status to cancelled (more reliable than DELETE)
+                const response = await axios.put(`${API_BASE_URL}/api/appointments/${appointmentId}`, 
+                  { 
+                    status: 'cancelled',
+                    vetNotes: 'Cancelled by vet from appointment management'
+                  },
+                  { headers: { Authorization: `Bearer ${token}` }}
+                );
+                console.log('Cancel response:', response.data);
+                loadAppointments();
+                if (ALL_ALERTS) {
+                  Alert.alert(t('appointmentManagement.success'), t('appointmentManagement.appointmentCancelled'));
+                }
+              } catch (error) {
+                console.error('Error cancelling appointment:', error);
+                console.error('Error response:', error.response?.data);
+                // If PUT fails, try the DELETE route as fallback
+                try {
+                  console.log('Trying DELETE route as fallback...');
+                  const token = await AsyncStorage.getItem('authToken');
+                  const deleteResponse = await axios({
+                    method: 'delete',
+                    url: `${API_BASE_URL}/api/appointments/${appointmentId}`,
+                    headers: { Authorization: `Bearer ${token}` },
+                    data: { reason: 'Cancelled by vet from appointment management' }
+                  });
+                  console.log('Delete response:', deleteResponse.data);
+                  loadAppointments();
+                  if (ALL_ALERTS) {
+                    Alert.alert(t('appointmentManagement.success'), t('appointmentManagement.appointmentCancelled'));
+                  }
+                } catch (deleteError) {
+                  console.error('Both PUT and DELETE failed:', deleteError);
+                  if (ALL_ALERTS) {
+                    Alert.alert(t('appointmentManagement.error'), deleteError.response?.data?.message || t('appointmentManagement.failedToCancel'));
+                  }
+                }
+              }
+            }
+          }
+        ]
+      );
+    } else {
+      // If alerts are disabled, directly cancel without confirmation
+      try {
+        console.log('Attempting to cancel appointment:', appointmentId);
+        const token = await AsyncStorage.getItem('authToken');
+        console.log('Token exists:', !!token);
+        // Try using PUT route to set status to cancelled (more reliable than DELETE)
+        const response = await axios.put(`${API_BASE_URL}/api/appointments/${appointmentId}`, 
+          { 
+            status: 'cancelled',
+            vetNotes: 'Cancelled by vet from appointment management'
+          },
+          { headers: { Authorization: `Bearer ${token}` }}
+        );
+        console.log('Cancel response:', response.data);
+        loadAppointments();
+      } catch (error) {
+        console.error('Error cancelling appointment:', error);
+        console.error('Error response:', error.response?.data);
+        // If PUT fails, try the DELETE route as fallback
+        try {
+          console.log('Trying DELETE route as fallback...');
+          const token = await AsyncStorage.getItem('authToken');
+          const deleteResponse = await axios({
+            method: 'delete',
+            url: `${API_BASE_URL}/api/appointments/${appointmentId}`,
+            headers: { Authorization: `Bearer ${token}` },
+            data: { reason: 'Cancelled by vet from appointment management' }
+          });
+          console.log('Delete response:', deleteResponse.data);
+          loadAppointments();
+        } catch (deleteError) {
+          console.error('Both PUT and DELETE failed:', deleteError);
         }
-      ]
-    );
+      }
+    }
   };
 
   const deleteAppointmentPermanently = async (appointmentId) => {
-    Alert.alert(
-      t('appointmentManagement.deleteAppointment'),
-      t('appointmentManagement.deleteAppointmentMessage'),
-      [
-        { text: t('appointmentManagement.cancel'), style: 'cancel' },
-        {
-          text: t('appointmentManagement.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('Attempting to delete appointment permanently:', appointmentId);
-              const token = await AsyncStorage.getItem('authToken');
-              await axios.delete(`${API_BASE_URL}/api/appointments/remove/${appointmentId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-              });
-              console.log('Appointment deleted successfully');
-              loadAppointments();
-            } catch (error) {
-              console.error('Error deleting appointment:', error);
-              console.error('Error response:', error.response?.data);
-              Alert.alert(t('appointmentManagement.error'), error.response?.data?.message || t('appointmentManagement.failedToDelete'));
+    if (ALL_ALERTS) {
+      Alert.alert(
+        t('appointmentManagement.deleteAppointment'),
+        t('appointmentManagement.deleteAppointmentMessage'),
+        [
+          { text: t('appointmentManagement.cancel'), style: 'cancel' },
+          {
+            text: t('appointmentManagement.delete'),
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                console.log('Attempting to delete appointment permanently:', appointmentId);
+                const token = await AsyncStorage.getItem('authToken');
+                await axios.delete(`${API_BASE_URL}/api/appointments/remove/${appointmentId}`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                console.log('Appointment deleted successfully');
+                loadAppointments();
+              } catch (error) {
+                console.error('Error deleting appointment:', error);
+                console.error('Error response:', error.response?.data);
+                if (ALL_ALERTS) {
+                  Alert.alert(t('appointmentManagement.error'), error.response?.data?.message || t('appointmentManagement.failedToDelete'));
+                }
+              }
             }
           }
-        }
-      ]
-    );
+        ]
+      );
+    } else {
+      // If alerts are disabled, directly delete without confirmation
+      try {
+        console.log('Attempting to delete appointment permanently:', appointmentId);
+        const token = await AsyncStorage.getItem('authToken');
+        await axios.delete(`${API_BASE_URL}/api/appointments/remove/${appointmentId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        console.log('Appointment deleted successfully');
+        loadAppointments();
+      } catch (error) {
+        console.error('Error deleting appointment:', error);
+        console.error('Error response:', error.response?.data);
+      }
+    }
   };
 
   const filteredAppointments = (Array.isArray(appointments) ? appointments : []).filter(appointment => {

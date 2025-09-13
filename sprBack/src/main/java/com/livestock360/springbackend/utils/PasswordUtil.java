@@ -53,4 +53,47 @@ public class PasswordUtil {
         String hashedPassword = hashPassword(password, salt);
         return hashedPassword.equals(hash);
     }
+
+    /**
+     * Hash password with auto-generated salt - matches SimpleBackend format
+     * Returns salt:hash format like SimpleBackend
+     */
+    public static String hashPassword(String password) {
+        try {
+            SecureRandom random = new SecureRandom();
+            byte[] salt = new byte[16];
+            random.nextBytes(salt);
+            
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(salt);
+            byte[] hashedPassword = md.digest(password.getBytes(StandardCharsets.UTF_8));
+            
+            // Convert to Base64 format like SimpleBackend
+            return java.util.Base64.getEncoder().encodeToString(salt) + ":" + 
+                   java.util.Base64.getEncoder().encodeToString(hashedPassword);
+        } catch (Exception e) {
+            throw new RuntimeException("Error hashing password", e);
+        }
+    }
+
+    /**
+     * Verify password against SimpleBackend format hash
+     */
+    public static boolean verifyPassword(String password, String hashedPassword) {
+        try {
+            String[] parts = hashedPassword.split(":");
+            if (parts.length != 2) return false;
+            
+            byte[] salt = java.util.Base64.getDecoder().decode(parts[0]);
+            byte[] hash = java.util.Base64.getDecoder().decode(parts[1]);
+            
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(salt);
+            byte[] testHash = md.digest(password.getBytes(StandardCharsets.UTF_8));
+            
+            return MessageDigest.isEqual(hash, testHash);
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }
