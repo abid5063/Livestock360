@@ -4,6 +4,7 @@ import com.livestock360.springbackend.model.Message;
 import com.livestock360.springbackend.service.MessageService;
 import com.livestock360.springbackend.service.FarmerService;
 import com.livestock360.springbackend.service.VetService;
+import com.livestock360.springbackend.service.CustomerService;
 import com.livestock360.springbackend.utils.JwtUtil;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -24,13 +25,15 @@ public class MessageController {
     private final MessageService messageService;
     private final FarmerService farmerService;
     private final VetService vetService;
+    private final CustomerService customerService;
     private final Gson gson = new Gson();
 
     @Autowired
-    public MessageController(MessageService messageService, FarmerService farmerService, VetService vetService) {
+    public MessageController(MessageService messageService, FarmerService farmerService, VetService vetService, CustomerService customerService) {
         this.messageService = messageService;
         this.farmerService = farmerService;
         this.vetService = vetService;
+        this.customerService = customerService;
     }
 
     // POST /api/messages - Send a message
@@ -69,6 +72,12 @@ public class MessageController {
                 }
             } else if ("vet".equals(receiverType)) {
                 if (vetService.findById(receiverId) == null) {
+                    JsonObject error = new JsonObject();
+                    error.addProperty("error", "Receiver not found");
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(gson.toJson(error));
+                }
+            } else if ("customer".equals(receiverType)) {
+                if (customerService.findById(receiverId) == null) {
                     JsonObject error = new JsonObject();
                     error.addProperty("error", "Receiver not found");
                     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(gson.toJson(error));
@@ -126,6 +135,13 @@ public class MessageController {
                         senderData.put("email", vet.getEmail());
                         senderData.put("specialty", vet.getSpecialty());
                     }
+                } else if ("customer".equals(userType)) {
+                    var customer = customerService.findById(userId);
+                    if (customer != null) {
+                        senderData.put("name", customer.getName());
+                        senderData.put("email", customer.getEmail());
+                        senderData.put("customerType", customer.getCustomerType());
+                    }
                 }
                 
                 if ("farmer".equals(receiverType)) {
@@ -140,6 +156,13 @@ public class MessageController {
                         receiverData.put("name", vet.getName());
                         receiverData.put("email", vet.getEmail());
                         receiverData.put("specialty", vet.getSpecialty());
+                    }
+                } else if ("customer".equals(receiverType)) {
+                    var customer = customerService.findById(receiverId);
+                    if (customer != null) {
+                        receiverData.put("name", customer.getName());
+                        receiverData.put("email", customer.getEmail());
+                        receiverData.put("customerType", customer.getCustomerType());
                     }
                 }
                 
@@ -212,6 +235,12 @@ public class MessageController {
                     error.addProperty("error", "Receiver not found or invalid receiver type");
                     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(gson.toJson(error));
                 }
+            } else if ("customer".equals(receiverType)) {
+                if (customerService.findById(receiverId) == null) {
+                    JsonObject error = new JsonObject();
+                    error.addProperty("error", "Receiver not found or invalid receiver type");
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(gson.toJson(error));
+                }
             } else {
                 JsonObject error = new JsonObject();
                 error.addProperty("error", "Receiver not found or invalid receiver type");
@@ -257,6 +286,14 @@ public class MessageController {
                     participant.put("phoneNo", vet.getPhoneNo());
                     participant.put("specialty", vet.getSpecialty());
                 }
+            } else if ("customer".equals(receiverType)) {
+                var customer = customerService.findById(receiverId);
+                if (customer != null) {
+                    participant.put("name", customer.getName());
+                    participant.put("email", customer.getEmail());
+                    participant.put("phoneNo", customer.getPhone());
+                    participant.put("customerType", customer.getCustomerType());
+                }
             }
             
             // Response format exactly like SimpleBackend
@@ -295,7 +332,7 @@ public class MessageController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(gson.toJson(error));
             }
 
-            List<Map<String, Object>> conversations = messageService.getUserConversations(userId, userType, farmerService, vetService);
+            List<Map<String, Object>> conversations = messageService.getUserConversations(userId, userType, farmerService, vetService, customerService);
             
             // Response format exactly like SimpleBackend (no "success" property, just direct data)
             Map<String, Object> response = new HashMap<>();

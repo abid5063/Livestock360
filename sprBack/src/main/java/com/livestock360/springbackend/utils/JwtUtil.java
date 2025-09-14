@@ -60,6 +60,13 @@ public class JwtUtil {
     }
 
     /**
+     * Generate JWT token for customers
+     */
+    public String generateTokenForCustomer(String customerId, String customerName, String email) {
+        return generateToken(customerId, email, customerName, "customer");
+    }
+
+    /**
      * Extract user ID from JWT token - matches SimpleBackend
      */
     public static String getUserIdFromToken(String token) {
@@ -157,7 +164,7 @@ public class JwtUtil {
      */
     public String extractUserType(String token) {
         Claims claims = extractClaims(token);
-        return claims != null ? (String) claims.get("userType") : null;
+        return claims != null ? (String) claims.get("type") : null;
     }
 
     /**
@@ -191,7 +198,7 @@ public class JwtUtil {
                 
                 // Preserve all claims including userType
                 String newToken = generateTokenFromClaims(claims);
-                System.out.println("Token refreshed successfully. UserType preserved: " + claims.get("userType"));
+                System.out.println("Token refreshed successfully. UserType preserved: " + claims.get("type"));
                 return newToken;
             }
             

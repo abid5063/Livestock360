@@ -30,6 +30,10 @@ export default function WelcomeScreen() {
     router.push('/vetAuth');
   };
 
+  const handleCustomerAuth = () => {
+    router.push('/customerAuth');
+  };
+
   const handleLearnMore = () => {
     try {
       // You can replace this URL with your actual tutorial video link
@@ -140,6 +144,16 @@ export default function WelcomeScreen() {
           >
             <Ionicons name="medical" size={28} color='#032001ff'/>
             <Text style={styles.buttonText}>{t('vet') || 'I\'m a Veterinarian'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.optionButton}
+            onPress={handleCustomerAuth}
+            testID="customer-option-button"
+            activeOpacity={0.8}
+          >
+            <Ionicons name="storefront" size={28} color='#032001ff'/>
+            <Text style={styles.buttonText}>{t('customer') || 'I\'m a Customer'}</Text>
           </TouchableOpacity>
         </View>
       </View>

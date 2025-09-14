@@ -95,7 +95,7 @@ public class MessageService {
 
     // Get user's conversations - format exactly like SimpleBackend
     public List<Map<String, Object>> getUserConversations(String userId, String userType, 
-            FarmerService farmerService, VetService vetService) {
+            FarmerService farmerService, VetService vetService, CustomerService customerService) {
         try {
             MongoCollection<Document> collection = getMessagesCollection();
             
@@ -164,6 +164,16 @@ public class MessageService {
                         participant.put("email", vet.getEmail());
                         participant.put("phoneNo", vet.getPhoneNo());
                         participant.put("specialty", vet.getSpecialty());
+                        participant.put("type", otherUserType);
+                    }
+                } else if ("customer".equals(otherUserType)) {
+                    var customer = customerService.findById(otherUserId);
+                    if (customer != null) {
+                        participant.put("id", otherUserId);
+                        participant.put("name", customer.getName());
+                        participant.put("email", customer.getEmail());
+                        participant.put("phoneNo", customer.getPhone());
+                        participant.put("customerType", customer.getCustomerType());
                         participant.put("type", otherUserType);
                     }
                 }

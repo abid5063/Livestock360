@@ -8,9 +8,11 @@ com\livestock360\springbackend\dto\RefreshRequest.class
 com\livestock360\springbackend\service\AnimalService.class
 com\livestock360\springbackend\dto\RegisterRequest.class
 com\livestock360\springbackend\service\AppointmentService.class
+com\livestock360\springbackend\controller\AnimalMarketplaceController.class
 com\livestock360\springbackend\model\Vet.class
 com\livestock360\springbackend\config\MongoConfig.class
 com\livestock360\springbackend\controller\AppointmentController$1.class
+com\livestock360\springbackend\model\Customer.class
 com\livestock360\springbackend\controller\VaccineController.class
 com\livestock360\springbackend\controller\AppointmentController.class
 com\livestock360\springbackend\controller\MessageController.class
@@ -20,6 +22,7 @@ com\livestock360\springbackend\utils\PasswordUtil.class
 com\livestock360\springbackend\controller\AnimalController.class
 com\livestock360\springbackend\dto\LoginRequest.class
 com\livestock360\springbackend\service\VetService.class
+com\livestock360\springbackend\service\CustomerService.class
 com\livestock360\springbackend\service\VaccineService.class
 com\livestock360\springbackend\Livestock360SpringBackendApplication.class
 com\livestock360\springbackend\model\Task.class

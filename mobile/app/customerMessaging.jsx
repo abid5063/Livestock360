@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,27 +10,16 @@ import {
   Alert,
   RefreshControl,
   Image,
-  Dimensions
+  SafeAreaView
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-import { API_BASE_URL } from '../utils/apiConfig'; // Adjust the import path as needed
-import { useLanguage } from '../utils/LanguageContext';
-import { useTranslation } from 'react-i18next';
+import { API_BASE_URL } from '../utils/apiConfig';
 
-const { width } = Dimensions.get('window');
-
-export default function FarmerMessaging() {
+export default function CustomerMessaging() {
   const router = useRouter();
-  const { language } = useLanguage();
-  const { t, i18n } = useTranslation();
-
-  // Update i18n language when language changes
-  useEffect(() => {
-    i18n.changeLanguage(language);
-  }, [language, i18n]);
+  const params = useLocalSearchParams();
 
   const [conversations, setConversations] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
@@ -42,118 +31,182 @@ export default function FarmerMessaging() {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [farmer, setFarmer] = useState(null);
+  const [customer, setCustomer] = useState(null);
+  const paramsProcessed = useRef(false);
 
-  // const API_BASE_URL = "http://localhost:3000/api";
-
-  useEffect(() => {
-    loadFarmerData();
-  }, []);
-
-  useEffect(() => {
-    if (farmer) {
-      fetchConversations();
-    }
-  }, [farmer]);
-
-  const loadFarmerData = async () => {
+  const loadCustomerData = useCallback(async () => {
     try {
-      const storedData = await AsyncStorage.getItem('userData');
+      const storedData = await AsyncStorage.getItem('customerData');
       if (storedData) {
-        setFarmer(JSON.parse(storedData));
+        setCustomer(JSON.parse(storedData));
+      } else {
+        router.replace('/customerAuth');
       }
     } catch (error) {
-      console.error("Error loading farmer data:", error);
+      console.error("Error loading customer data:", error);
+      router.replace('/customerAuth');
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    loadCustomerData();
+  }, [loadCustomerData]);
+
+  useEffect(() => {
+    if (customer) {
+      fetchConversations();
+    }
+  }, [customer]);
+
+  useEffect(() => {
+    // If we have farmer params, start a new conversation immediately (only once)
+    if (params.farmerId && params.farmerName && customer && !paramsProcessed.current) {
+      paramsProcessed.current = true;
+      startNewConversationWithFarmer({
+        _id: params.farmerId,
+        id: params.farmerId,
+        name: params.farmerName,
+        animalContext: params.animalContext
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, customer]);
 
   const fetchConversations = async () => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
-      const response = await axios.get(`${API_BASE_URL}/api/messages/conversations`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = await AsyncStorage.getItem('customerToken');
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/messages/conversations`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
-      setConversations(response.data.conversations || []);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Customer conversations:', data);
+        setConversations(data.conversations || []);
+      } else {
+        console.error('Failed to fetch conversations:', response.status);
+      }
     } catch (error) {
       console.error("Error fetching conversations:", error);
     }
   };
 
-  const searchVets = async (query = '') => {
+  const searchFarmers = async (query = '') => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/vets/search`, {
-        params: query.trim() !== '' ? { search: query } : {}
+      const token = await AsyncStorage.getItem('customerToken');
+      const url = query.trim() !== '' 
+        ? `${API_BASE_URL}/api/auth/farmers/search?search=${encodeURIComponent(query)}`
+        : `${API_BASE_URL}/api/auth/farmers`;
+      
+      const response = await fetch(url, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
       
-      setSearchResults(response.data.vets || []);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Farmers search result:', data);
+        setSearchResults(data.farmers || []);
+      } else {
+        console.error('Failed to search farmers:', response.status);
+        Alert.alert('Error', 'Failed to search farmers');
+      }
     } catch (error) {
-      console.error("Error searching vets:", error);
-      Alert.alert(t('farmerMessaging.error'), t('farmerMessaging.failedToSearch'));
+      console.error("Error searching farmers:", error);
+      Alert.alert('Error', 'Network error while searching farmers');
     }
   };
 
-  const startNewConversation = async (vet) => {
+  const startNewConversationWithFarmer = async (farmer) => {
     try {
-      // Close the search modal first
       setShowSearch(false);
       
-      // First, check if there's an existing conversation with this vet
-      const existingConversation = conversations.find(conv => 
-        conv.participant.id === vet._id || conv.participant._id === vet._id
-      );
+      // Get current conversations from state
+      setConversations(currentConversations => {
+        // Check if there's an existing conversation with this farmer
+        const existingConversation = currentConversations.find(conv => 
+          conv.participant.id === farmer._id || 
+          conv.participant._id === farmer._id ||
+          conv.participant.id === farmer.id
+        );
 
-      if (existingConversation) {
-        // Open existing conversation
-        await openExistingConversation(existingConversation);
-      } else {
-        // Create new conversation
-        const conversation = {
-          participant: {
-            id: vet._id,
-            name: vet.name,
-            specialty: vet.specialty,
-            avatar: vet.profileImage
-          },
-          messages: []
-        };
-        setSelectedConversation(conversation);
-        setMessages([]);
-        setShowChat(true);
-      }
+        if (existingConversation) {
+          openExistingConversation(existingConversation);
+        } else {
+          // Create new conversation
+          const conversation = {
+            participant: {
+              id: farmer._id || farmer.id,
+              _id: farmer._id || farmer.id,
+              name: farmer.name,
+              location: farmer.location || '',
+              avatar: farmer.profileImage || farmer.profilePicture || ''
+            },
+            messages: []
+          };
+          setSelectedConversation(conversation);
+          setMessages([]);
+          
+          // If we have animal context, add it as initial message
+          if (farmer.animalContext) {
+            setNewMessage(farmer.animalContext);
+          }
+          
+          setShowChat(true);
+        }
+        
+        return currentConversations; // Don't actually change conversations state
+      });
     } catch (error) {
       console.error("Error starting conversation:", error);
+      Alert.alert('Error', 'Failed to start conversation');
     }
   };
 
   const openExistingConversation = async (conversation) => {
     try {
       setSelectedConversation(conversation);
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await AsyncStorage.getItem('customerToken');
       
-      // Use the participant's _id or id field
       const participantId = conversation.participant._id || conversation.participant.id;
       
       if (!participantId) {
         console.error("No participant ID found in conversation:", conversation);
-        Alert.alert(t('farmerMessaging.error'), t('farmerMessaging.invalidConversationData'));
+        Alert.alert('Error', 'Invalid conversation data');
         return;
       }
       
-      // Determine participant type based on whether they have specialty field
-      const participantType = conversation.participant.specialty ? 'vet' : 'customer';
-      
-      const response = await axios.get(
-        `${API_BASE_URL}/api/messages/conversation/${participantId}/${participantType}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await fetch(
+        `${API_BASE_URL}/api/messages/conversation/${participantId}/farmer`,
+        { 
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
       );
       
-      setMessages(response.data.messages || []);
-      setShowChat(true);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Conversation messages:', data);
+        setMessages(data.messages || []);
+        setShowChat(true);
+      } else {
+        console.error('Failed to load conversation:', response.status);
+        Alert.alert('Error', 'Failed to load conversation');
+      }
     } catch (error) {
       console.error("Error fetching conversation:", error);
-      Alert.alert(t('farmerMessaging.error'), t('farmerMessaging.failedToLoadConversation'));
+      Alert.alert('Error', 'Failed to load conversation');
     }
   };
 
@@ -162,59 +215,77 @@ export default function FarmerMessaging() {
 
     const messageText = newMessage.trim();
     const tempMessage = {
-      _id: Date.now().toString(), // Temporary ID
+      _id: Date.now().toString(),
       content: messageText,
-      senderType: 'farmer',
+      senderType: 'customer',
       createdAt: new Date().toISOString(),
       isTemp: true
     };
 
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await AsyncStorage.getItem('customerToken');
       
       // Add message to UI immediately for better UX
       setMessages(prev => [tempMessage, ...prev]);
       setNewMessage('');
       
-      // Use the participant's _id or id field
       const participantId = selectedConversation.participant._id || selectedConversation.participant.id;
       
       if (!participantId) {
         console.error("No participant ID found in conversation:", selectedConversation);
-        Alert.alert(t('farmerMessaging.error'), t('farmerMessaging.invalidConversationData'));
+        Alert.alert('Error', 'Invalid conversation data');
         return;
       }
       
-      // Determine participant type based on whether they have specialty field
-      const participantType = selectedConversation.participant.specialty ? 'vet' : 'customer';
-      
-      const response = await axios.post(
-        `${API_BASE_URL}/api/messages`,
-        {
-          receiverId: participantId,
-          receiverType: participantType,
-          content: messageText
+      const response = await fetch(`${API_BASE_URL}/api/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+        body: JSON.stringify({
+          receiverId: participantId,
+          receiverType: 'farmer',
+          content: messageText
+        })
+      });
 
-      // Refresh messages to get the actual saved message
-      const messagesResponse = await axios.get(
-        `${API_BASE_URL}/api/messages/conversation/${participantId}/${participantType}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      
-      setMessages(messagesResponse.data.messages || []);
-      
-      // Refresh conversations list
-      fetchConversations();
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Message sent:', data);
+        
+        // Refresh messages to get the actual saved message
+        const messagesResponse = await fetch(
+          `${API_BASE_URL}/api/messages/conversation/${participantId}/farmer`,
+          { 
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
+        if (messagesResponse.ok) {
+          const messagesData = await messagesResponse.json();
+          setMessages(messagesData.messages || []);
+        }
+        
+        // Refresh conversations list
+        fetchConversations();
+      } else {
+        console.error('Failed to send message:', response.status);
+        // Remove the temporary message on error
+        setMessages(prev => prev.filter(msg => msg._id !== tempMessage._id));
+        setNewMessage(messageText); // Restore the message text
+        Alert.alert('Error', 'Failed to send message');
+      }
       
     } catch (error) {
       console.error("Error sending message:", error);
       // Remove the temporary message on error
       setMessages(prev => prev.filter(msg => msg._id !== tempMessage._id));
       setNewMessage(messageText); // Restore the message text
-      Alert.alert(t('farmerMessaging.error'), t('farmerMessaging.failedToSendMessage'));
+      Alert.alert('Error', 'Network error. Please try again.');
     }
   };
 
@@ -233,7 +304,7 @@ export default function FarmerMessaging() {
     if (diffDays === 0) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (diffDays === 1) {
-      return t('farmerMessaging.yesterday');
+      return 'Yesterday';
     } else if (diffDays < 7) {
       return date.toLocaleDateString([], { weekday: 'short' });
     } else {
@@ -260,22 +331,19 @@ export default function FarmerMessaging() {
       <View style={styles.conversationContent}>
         <View style={styles.conversationHeader}>
           <Text style={styles.participantName} numberOfLines={1}>
-            {item.participant.specialty ? `Dr. ${item.participant.name}` : item.participant.name}
+            {item.participant.name}
           </Text>
           <Text style={styles.messageTime}>
             {formatMessageTime(item.lastMessage?.timestamp)}
           </Text>
         </View>
         
-        <Text style={styles.participantSpecialty} numberOfLines={1}>
-          {item.participant.specialty 
-            ? (item.participant.specialty || t('farmerMessaging.veterinarian'))
-            : 'Customer • ' + (item.participant.location || 'Location not specified')
-          }
+        <Text style={styles.participantType} numberOfLines={1}>
+          Farmer • {item.participant.location || 'Location not specified'}
         </Text>
         
         <Text style={styles.lastMessage} numberOfLines={2}>
-          {item.lastMessage?.content || t('farmerMessaging.noMessagesYet')}
+          {item.lastMessage?.content || 'No messages yet'}
         </Text>
       </View>
       
@@ -287,37 +355,32 @@ export default function FarmerMessaging() {
     </TouchableOpacity>
   );
 
-  const renderVetSearchItem = ({ item }) => (
+  const renderFarmerSearchItem = ({ item }) => (
     <TouchableOpacity
-      style={styles.vetSearchItem}
-      onPress={() => startNewConversation(item)}
+      style={styles.farmerSearchItem}
+      onPress={() => startNewConversationWithFarmer(item)}
     >
       <View style={styles.avatarContainer}>
         {item.profileImage ? (
           <Image source={{ uri: item.profileImage }} style={styles.avatar} />
         ) : (
           <View style={styles.avatarPlaceholder}>
-            <Ionicons name="medical" size={24} color="#27ae60" />
+            <Ionicons name="person" size={24} color="#27ae60" />
           </View>
         )}
       </View>
       
-      <View style={styles.vetInfo}>
-        <Text style={styles.vetName}>Dr. {item.name}</Text>
-        <Text style={styles.vetSpecialty}>{item.specialty}</Text>
-        <Text style={styles.vetLocation}>{item.location}</Text>
-        <View style={styles.ratingContainer}>
-          <Ionicons name="star" size={12} color="#f39c12" />
-          <Text style={styles.ratingText}>
-            {item.rating ? `${item.rating}/5` : t('farmerMessaging.new')} 
-            {item.totalReviews ? ` (${item.totalReviews})` : ''}
-          </Text>
-        </View>
+      <View style={styles.farmerInfo}>
+        <Text style={styles.farmerName}>{item.name}</Text>
+        <Text style={styles.farmerLocation}>{item.location || 'Location not specified'}</Text>
+        {item.phoneNo && (
+          <Text style={styles.farmerPhone}>📞 {item.phoneNo}</Text>
+        )}
       </View>
       
       <TouchableOpacity
         style={styles.chatButton}
-        onPress={() => startNewConversation(item)}
+        onPress={() => startNewConversationWithFarmer(item)}
       >
         <Ionicons name="chatbubbles" size={16} color="#fff" />
       </TouchableOpacity>
@@ -327,17 +390,17 @@ export default function FarmerMessaging() {
   const renderMessage = ({ item }) => (
     <View style={[
       styles.messageContainer,
-      item.senderType === 'farmer' ? styles.sentMessage : styles.receivedMessage
+      item.senderType === 'customer' ? styles.sentMessage : styles.receivedMessage
     ]}>
       <Text style={[
         styles.messageText,
-        item.senderType === 'farmer' ? styles.sentMessageText : styles.receivedMessageText
+        item.senderType === 'customer' ? styles.sentMessageText : styles.receivedMessageText
       ]}>
         {item.content}
       </Text>
       <Text style={[
         styles.messageTimestamp,
-        item.senderType === 'farmer' ? styles.sentTimestamp : styles.receivedTimestamp
+        item.senderType === 'customer' ? styles.sentTimestamp : styles.receivedTimestamp
       ]}>
         {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </Text>
@@ -346,24 +409,24 @@ export default function FarmerMessaging() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>{t('farmerMessaging.loadingMessages')}</Text>
-      </View>
+      <SafeAreaView style={styles.loadingContainer}>
+        <Text>Loading messages...</Text>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#2c3e50" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('farmerMessaging.headerTitle')}</Text>
+        <Text style={styles.headerTitle}>Messages</Text>
         <TouchableOpacity onPress={() => {
           setShowSearch(true);
-          setSearchQuery(''); // Clear search query
-          searchVets(); // Load all vets initially
+          setSearchQuery('');
+          searchFarmers();
         }}>
           <Ionicons name="search" size={24} color="#2c3e50" />
         </TouchableOpacity>
@@ -382,9 +445,9 @@ export default function FarmerMessaging() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="chatbubbles-outline" size={64} color="#bdc3c7" />
-              <Text style={styles.emptyTitle}>{t('farmerMessaging.noConversationsYet')}</Text>
+              <Text style={styles.emptyTitle}>No conversations yet</Text>
               <Text style={styles.emptySubtitle}>
-                {t('farmerMessaging.tapSearchToFind')}
+                Tap the search icon to find farmers to message
               </Text>
             </View>
           }
@@ -401,41 +464,15 @@ export default function FarmerMessaging() {
             </TouchableOpacity>
             <View style={styles.chatHeaderInfo}>
               <Text style={styles.chatHeaderName}>
-                {selectedConversation.participant.specialty 
-                  ? `Dr. ${selectedConversation.participant.name}` 
-                  : selectedConversation.participant.name}
+                {selectedConversation.participant.name}
               </Text>
-              <Text style={styles.chatHeaderSpecialty}>
-                {selectedConversation.participant.specialty 
-                  ? selectedConversation.participant.specialty
-                  : 'Customer • ' + (selectedConversation.participant.location || 'Location not specified')
-                }
+              <Text style={styles.chatHeaderType}>
+                Farmer • {selectedConversation.participant.location || 'Location not specified'}
               </Text>
             </View>
             <View style={styles.chatHeaderActions}>
-              {selectedConversation.participant.specialty && (
-                <TouchableOpacity 
-                  style={styles.appointmentButton}
-                  onPress={() => {
-                    const vetId = selectedConversation.participant._id || selectedConversation.participant.id;
-                    const vetName = selectedConversation.participant.name;
-                    router.push({
-                      pathname: '/addAppointment',
-                      params: {
-                        vetId: vetId,
-                        vetName: vetName,
-                        fromChat: 'true',
-                        farmerId: farmer?._id,
-                        farmerName: farmer?.name
-                      }
-                    });
-                  }}
-                >
-                  <Ionicons name="calendar" size={20} color="#3498db" />
-                </TouchableOpacity>
-              )}
               <TouchableOpacity>
-                <Ionicons name="call" size={24} color="#27ae60" />
+                <MaterialIcons name="info" size={24} color="#2E7D32" />
               </TouchableOpacity>
             </View>
           </View>
@@ -446,7 +483,6 @@ export default function FarmerMessaging() {
             renderItem={renderMessage}
             keyExtractor={(item) => item._id}
             contentContainerStyle={styles.messagesList}
-          // removed inverted so latest message is at the bottom
           />
 
           {/* Message Input */}
@@ -455,7 +491,7 @@ export default function FarmerMessaging() {
               style={styles.messageInput}
               value={newMessage}
               onChangeText={setNewMessage}
-              placeholder={t('farmerMessaging.typeMessage')}
+              placeholder="Type a message..."
               multiline
               maxLength={500}
             />
@@ -466,18 +502,18 @@ export default function FarmerMessaging() {
         </View>
       )}
 
-      {/* Search Vets Modal */}
+      {/* Search Farmers Modal */}
       <Modal
         visible={showSearch}
         animationType="slide"
         presentationStyle="pageSheet"
       >
-        <View style={styles.searchContainer}>
+        <SafeAreaView style={styles.searchContainer}>
           <View style={styles.searchHeader}>
             <TouchableOpacity onPress={() => setShowSearch(false)}>
               <Ionicons name="close" size={24} color="#2c3e50" />
             </TouchableOpacity>
-            <Text style={styles.searchTitle}>{t('farmerMessaging.findVeterinarians')}</Text>
+            <Text style={styles.searchTitle}>Find Farmers</Text>
             <View style={{ width: 24 }} />
           </View>
 
@@ -488,29 +524,29 @@ export default function FarmerMessaging() {
               value={searchQuery}
               onChangeText={(text) => {
                 setSearchQuery(text);
-                searchVets(text);
+                searchFarmers(text);
               }}
-              placeholder={t('farmerMessaging.searchPlaceholder')}
+              placeholder="Search farmers by name or location..."
             />
           </View>
 
           <FlatList
             data={searchResults}
-            renderItem={renderVetSearchItem}
+            renderItem={renderFarmerSearchItem}
             keyExtractor={(item) => item._id}
             contentContainerStyle={styles.searchResults}
             ListEmptyComponent={
               <View style={styles.emptySearch}>
                 <Ionicons name="search-outline" size={48} color="#bdc3c7" />
                 <Text style={styles.emptySearchText}>
-                  {searchQuery ? t('farmerMessaging.noVetsFound') : t('farmerMessaging.noVetsAvailable')}
+                  {searchQuery ? 'No farmers found' : 'Search for farmers to start messaging'}
                 </Text>
               </View>
             }
           />
-        </View>
+        </SafeAreaView>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -598,7 +634,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#95a5a6',
   },
-  participantSpecialty: {
+  participantType: {
     fontSize: 12,
     color: '#27ae60',
     marginBottom: 4,
@@ -663,16 +699,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#2c3e50',
   },
-  chatHeaderSpecialty: {
+  chatHeaderType: {
     fontSize: 12,
     color: '#27ae60',
   },
   chatHeaderActions: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  appointmentButton: {
-    marginRight: 16,
   },
   messagesList: {
     paddingVertical: 16,
@@ -686,7 +719,7 @@ const styles = StyleSheet.create({
   },
   sentMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#3498db',
+    backgroundColor: '#2E7D32',
   },
   receivedMessage: {
     alignSelf: 'flex-start',
@@ -734,7 +767,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   sendButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: '#2E7D32',
     borderRadius: 20,
     width: 40,
     height: 40,
@@ -780,7 +813,7 @@ const styles = StyleSheet.create({
   searchResults: {
     paddingVertical: 8,
   },
-  vetSearchItem: {
+  farmerSearchItem: {
     flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 16,
@@ -789,37 +822,27 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ecf0f1',
     alignItems: 'center',
   },
-  vetInfo: {
+  farmerInfo: {
     flex: 1,
     marginLeft: 16,
   },
-  vetName: {
+  farmerName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2c3e50',
     marginBottom: 4,
   },
-  vetSpecialty: {
+  farmerLocation: {
     fontSize: 14,
-    color: '#27ae60',
+    color: '#7f8c8d',
     marginBottom: 2,
   },
-  vetLocation: {
+  farmerPhone: {
     fontSize: 12,
-    color: '#7f8c8d',
-    marginBottom: 4,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingText: {
-    fontSize: 12,
-    color: '#f39c12',
-    marginLeft: 4,
+    color: '#27ae60',
   },
   chatButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: '#2E7D32',
     borderRadius: 20,
     width: 36,
     height: 36,

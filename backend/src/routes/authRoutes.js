@@ -70,32 +70,77 @@ router.post("/register", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
+    const { userType } = req.query;
     const { email, password } = req.body;
 
-    if (!email || !password) return res.status(400).json({ message: "All fields are required" });
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "All fields are required" });
+    }
 
-    const farmer = await Farmer.findOne({ email });
-    if (!farmer) return res.status(400).json({ message: "Invalid credentials" });
+    if (userType === 'customer') {
+      // Handle customer login
+      const customer = await Customer.findOne({ email });
+      if (!customer) {
+        return res.status(400).json({ success: false, message: "Invalid credentials" });
+      }
 
-    const isPasswordCorrect = await farmer.comparePassword(password);
-    if (!isPasswordCorrect) return res.status(400).json({ message: "Invalid credentials" });
+      const isPasswordCorrect = await customer.comparePassword(password);
+      if (!isPasswordCorrect) {
+        return res.status(400).json({ success: false, message: "Invalid credentials" });
+      }
 
-    const token = generateToken(farmer._id);
+      const token = generateToken(customer._id, 'customer');
 
-    res.status(200).json({
-      token,
-      farmer: {
-        id: farmer._id,
-        name: farmer.name,
-        email: farmer.email,
-        profileImage: farmer.profileImage,
-        phoneNo: farmer.phoneNo,
-        location: farmer.location,
-      },
-    });
+      res.status(200).json({
+        success: true,
+        token,
+        customer: {
+          _id: customer._id,
+          name: customer.name,
+          email: customer.email,
+          profileImage: customer.profileImage,
+          phone: customer.phone,
+          location: customer.location,
+          address: customer.address,
+          customerType: customer.customerType,
+          maxBudget: customer.maxBudget,
+          interestedAnimalTypes: customer.interestedAnimalTypes,
+          businessName: customer.businessName,
+          businessLicense: customer.businessLicense,
+          dateJoined: customer.dateJoined
+        },
+      });
+
+    } else {
+      // Handle farmer login (existing logic)
+      const farmer = await Farmer.findOne({ email });
+      if (!farmer) {
+        return res.status(400).json({ success: false, message: "Invalid credentials" });
+      }
+
+      const isPasswordCorrect = await farmer.comparePassword(password);
+      if (!isPasswordCorrect) {
+        return res.status(400).json({ success: false, message: "Invalid credentials" });
+      }
+
+      const token = generateToken(farmer._id, 'farmer');
+
+      res.status(200).json({
+        success: true,
+        token,
+        farmer: {
+          id: farmer._id,
+          name: farmer.name,
+          email: farmer.email,
+          profileImage: farmer.profileImage,
+          phoneNo: farmer.phoneNo,
+          location: farmer.location,
+        },
+      });
+    }
   } catch (error) {
     console.log("Error in login route", error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
@@ -189,6 +234,92 @@ router.get("/farmers", async (req, res) => {
   } catch (error) {
     console.error("Get farmers error:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// Customer profile routes
+router.get("/customers/profile", protectRoute, async (req, res) => {
+  try {
+    let customer;
+    
+    if (req.customer) {
+      customer = await Customer.findById(req.customer._id).select("-password");
+    } else {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      customer: {
+        _id: customer._id,
+        name: customer.name,
+        email: customer.email,
+        profileImage: customer.profileImage,
+        phone: customer.phone,
+        location: customer.location,
+        address: customer.address,
+        customerType: customer.customerType,
+        maxBudget: customer.maxBudget,
+        interestedAnimalTypes: customer.interestedAnimalTypes,
+        businessName: customer.businessName,
+        businessLicense: customer.businessLicense,
+        dateJoined: customer.dateJoined
+      }
+    });
+  } catch (error) {
+    console.log("Error in customer profile route", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// Edit customer profile
+router.put("/customers/profile", protectRoute, async (req, res) => {
+  try {
+    if (!req.customer) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const updates = req.body;
+    // Don't allow password updates through this route
+    delete updates.password;
+    delete updates.email; // Don't allow email updates for security
+
+    const customer = await Customer.findByIdAndUpdate(
+      req.customer._id,
+      updates,
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      customer: {
+        _id: customer._id,
+        name: customer.name,
+        email: customer.email,
+        profileImage: customer.profileImage,
+        phone: customer.phone,
+        location: customer.location,
+        address: customer.address,
+        customerType: customer.customerType,
+        maxBudget: customer.maxBudget,
+        interestedAnimalTypes: customer.interestedAnimalTypes,
+        businessName: customer.businessName,
+        businessLicense: customer.businessLicense,
+        dateJoined: customer.dateJoined
+      }
+    });
+  } catch (error) {
+    console.log("Error in edit customer profile route", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 

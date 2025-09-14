@@ -1,5 +1,6 @@
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\controller\AppointmentController.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\model\Task.java
+C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\service\CustomerService.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\utils\PasswordUtil.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\config\MongoConfig.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\model\Appointment.java
@@ -9,9 +10,11 @@ C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbacke
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\controller\MessageController.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\config\CorsConfig.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\service\AnimalService.java
+C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\controller\AnimalMarketplaceController.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\controller\TaskController.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\model\Vaccine.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\model\Farmer.java
+C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\model\Customer.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\service\AppointmentService.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\model\Message.java
 C:\Users\h\Music\Livestock360\sprBack\src\main\java\com\livestock360\springbackend\service\TaskService.java
