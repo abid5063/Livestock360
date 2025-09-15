@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  livestock360-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: livestock360-spring-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SERVER_PORT=5000
+      # MongoDB connection (using your existing connection string)
+      - SPRING_DATA_MONGODB_URI=mongodb+srv://abidhasan7116:YpLEaZIAY0AmR4j0@cluster0.lx8cqwh.mongodb.net/AGROLINK?retryWrites=true&w=majority&appName=Cluster0
+      # JWT Configuration
+      - JWT_SECRET=mysecretkeythatislongenoughforjwthmacsha256algorithm
+      - JWT_EXPIRATION=86400000
+    restart: unless-stopped
+    networks:
+      - livestock360-network
+
+networks:
+  livestock360-network:
+    driver: bridge
+
+# Optional: If you want to use a local MongoDB instead
+# Uncomment the following service and update the MongoDB URI above
+#
+# mongodb:
+#   image: mongo:7.0
+#   container_name: livestock360-mongodb
+#   ports:
+#     - "27017:27017"
+#   environment:
+#     - MONGO_INITDB_ROOT_USERNAME=admin
+#     - MONGO_INITDB_ROOT_PASSWORD=password
+#     - MONGO_INITDB_DATABASE=AGROLINK
+#   volumes:
+#     - mongodb_data:/data/db
+#   networks:
+#     - livestock360-network
+#
+# volumes:
+#   mongodb_data:

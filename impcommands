@@ -1,7 +1,20 @@
-in this mobile\app\taskManagement.jsx file make the allert message be visible only if the ALL_ALERTS is true, just like in the mobile\app\animalDetails.jsx
-
-
-now read this file-backend\src\routes\taskRoutes.js carefully and implement the apis in it in the java backend. The new apis should be exactly same in name and the arguments. The functionality of the apis also should be identical.
-
+to run front end - 
 cd backendJavaSimple; mvn clean compile
 mvn exec:java
+
+
+
+
+to build docker image-
+powershell -ExecutionPolicy Bypass -File .\docker-script-fixed.ps1 build
+to run docker image -
+powershell -ExecutionPolicy Bypass -File .\docker-script-fixed.ps1 run
+to stop image - 
+docker stop livestock360-backend
+
+Docker Hub Commands:
+1. Login to Docker Hub: docker login
+2. Tag image: docker tag livestock360-spring-backend:latest abidhasan83/livestock360-spring-backend:latest
+3. Push image: docker push abidhasan83/livestock360-spring-backend:latest
+
+Note: You need to create the repository 'livestock360-spring-backend' on Docker Hub first at https://hub.docker.com
