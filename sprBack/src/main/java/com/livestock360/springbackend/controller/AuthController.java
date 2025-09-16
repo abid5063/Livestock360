@@ -1034,6 +1034,171 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(response.toString());
     }
 
+    @GetMapping("/farmers/token-balance")
+    public ResponseEntity<String> getTokenBalance(@RequestHeader("Authorization") String authHeader) {
+        try {
+            System.out.println("Token balance request received");
+
+            // Extract token from Authorization header
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "Authorization header missing or invalid");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response.toString());
+            }
+
+            String token = authHeader.substring(7); // Remove "Bearer " prefix
+            Claims claims = jwtUtil.extractClaims(token);
+            
+            if (claims == null) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "Invalid or expired token");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response.toString());
+            }
+
+            String userId = claims.getSubject();
+            String userType = (String) claims.get("type");
+
+            // Verify this is a farmer token
+            if (!"farmer".equals(userType)) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "This endpoint is only for farmers");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response.toString());
+            }
+
+            // Find the farmer
+            Farmer farmer = farmerService.findById(userId);
+            if (farmer == null) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "Farmer not found");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response.toString());
+            }
+
+            // Return token balance
+            JsonObject response = new JsonObject();
+            response.addProperty("success", true);
+            response.addProperty("tokenBalance", farmer.getTokenCount() != null ? farmer.getTokenCount() : 0);
+            response.addProperty("userId", userId);
+            return ResponseEntity.ok(response.toString());
+
+        } catch (Exception e) {
+            System.out.println("Token balance error: " + e.getMessage());
+            e.printStackTrace();
+            
+            JsonObject response = new JsonObject();
+            response.addProperty("success", false);
+            response.addProperty("message", "Internal server error during token balance retrieval");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response.toString());
+        }
+    }
+
+    @PostMapping("/farmers/deduct-tokens")
+    public ResponseEntity<String> deductTokens(@RequestBody Map<String, Object> request,
+                                              @RequestHeader("Authorization") String authHeader) {
+        try {
+            System.out.println("Token deduction request received");
+            System.out.println("Request: " + gson.toJson(request));
+
+            // Extract token from Authorization header
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "Authorization header missing or invalid");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response.toString());
+            }
+
+            String token = authHeader.substring(7); // Remove "Bearer " prefix
+            Claims claims = jwtUtil.extractClaims(token);
+            
+            if (claims == null) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "Invalid or expired token");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response.toString());
+            }
+
+            // Validate request parameters
+            if (!request.containsKey("userId") || !request.containsKey("amount") || !request.containsKey("featureUsed")) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "userId, amount, and featureUsed are required");
+                return ResponseEntity.badRequest().body(response.toString());
+            }
+
+            String userId = request.get("userId").toString();
+            int amount = Integer.parseInt(request.get("amount").toString());
+            String featureUsed = request.get("featureUsed").toString();
+
+            // Verify the authenticated user is making the request for themselves
+            String tokenUserId = claims.getSubject();
+            if (!tokenUserId.equals(userId)) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "Unauthorized to deduct tokens for this user");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response.toString());
+            }
+
+            // Find the farmer
+            Farmer farmer = farmerService.findById(userId);
+            if (farmer == null) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "Farmer not found");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response.toString());
+            }
+
+            // Check if farmer has enough tokens
+            if (farmer.getTokenCount() < amount) {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "Insufficient tokens");
+                response.addProperty("currentBalance", farmer.getTokenCount());
+                response.addProperty("requiredAmount", amount);
+                return ResponseEntity.badRequest().body(response.toString());
+            }
+
+            // Deduct tokens
+            farmer.setTokenCount(farmer.getTokenCount() - amount);
+            Farmer updatedFarmer = farmerService.save(farmer);
+
+            if (updatedFarmer != null) {
+                // Log the token usage
+                System.out.println("Token deduction: User " + userId + " used " + amount + " tokens for " + featureUsed + ". New balance: " + updatedFarmer.getTokenCount());
+
+                JsonObject response = new JsonObject();
+                response.addProperty("success", true);
+                response.addProperty("message", "Tokens deducted successfully");
+                response.addProperty("newBalance", updatedFarmer.getTokenCount());
+                response.addProperty("deductedAmount", amount);
+                response.addProperty("featureUsed", featureUsed);
+                return ResponseEntity.ok(response.toString());
+            } else {
+                JsonObject response = new JsonObject();
+                response.addProperty("success", false);
+                response.addProperty("message", "Failed to update token balance");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response.toString());
+            }
+
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid amount format: " + e.getMessage());
+            JsonObject response = new JsonObject();
+            response.addProperty("success", false);
+            response.addProperty("message", "Invalid amount format");
+            return ResponseEntity.badRequest().body(response.toString());
+        } catch (Exception e) {
+            System.out.println("Token deduction error: " + e.getMessage());
+            e.printStackTrace();
+            
+            JsonObject response = new JsonObject();
+            response.addProperty("success", false);
+            response.addProperty("message", "Internal server error during token deduction");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response.toString());
+        }
+    }
+
     private boolean isValidEmail(String email) {
         return email != null && email.contains("@") && email.contains(".");
     }

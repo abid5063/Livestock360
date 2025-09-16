@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import axios from 'axios';
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
+import { deductTokens, checkTokenSufficiency, TOKEN_COSTS } from '../utils/tokenUtils';
 
 const IMPORTANT_SYMPTOMS = [
   "fever",
@@ -60,7 +61,30 @@ export default function ProMode() {
     setPrediction(null);
 
     try {
-      // Create symptoms object with all important symptoms
+      // Step 1: Check if user has sufficient tokens
+      const tokenCheck = await checkTokenSufficiency(TOKEN_COSTS.PRO_MODE);
+      
+      if (!tokenCheck.sufficient) {
+        Alert.alert(
+          t('proMode.insufficientTokens'), 
+          tokenCheck.message + '. Please purchase more tokens to continue.'
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: Deduct tokens before making the ML API call
+      const deductionResult = await deductTokens(TOKEN_COSTS.PRO_MODE, 'Pro Mode Disease Prediction');
+      
+      if (!deductionResult.success) {
+        Alert.alert(t('proMode.tokenError'), deductionResult.message);
+        setLoading(false);
+        return;
+      }
+
+      console.log(`✅ Tokens deducted successfully. New balance: ${deductionResult.newBalance}`);
+
+      // Step 3: Create symptoms object with all important symptoms
       const symptomsObject = {};
       IMPORTANT_SYMPTOMS.forEach(symptom => {
         symptomsObject[symptom] = selectedSymptoms[symptom] || 0;
@@ -72,8 +96,9 @@ export default function ProMode() {
 
       console.log('Sending symptoms data:', JSON.stringify(symptomsData, null, 2));
 
+      // Step 4: Call the ML API
       const response = await axios.post(
-        'http://104.214.178.145:80/predict',
+        'http://52.184.80.117:80/predict',
         symptomsData,
         {
           headers: {
@@ -84,6 +109,13 @@ export default function ProMode() {
 
       console.log('API Response:', response.data);
       setPrediction(response.data);
+      
+      // Show success message with new token balance
+      Alert.alert(
+        t('proMode.predictionComplete'), 
+        `${t('proMode.tokensUsed')}: ${TOKEN_COSTS.PRO_MODE}. ${t('proMode.remainingTokens')}: ${deductionResult.newBalance}`
+      );
+      
     } catch (error) {
       console.error('Prediction error:', error);
       Alert.alert(

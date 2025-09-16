@@ -13,9 +13,12 @@ public class Farmer {
     private String address;
     private String profilePicture;
     private String dateJoined;
+    private Integer tokenCount; // Token balance for subscriptions
 
     // Constructors
-    public Farmer() {}
+    public Farmer() {
+        this.tokenCount = 0; // Default token count is 0
+    }
 
     public Farmer(String name, String email, String password, String salt, String phone, 
                  String location, String address, String profilePicture, String dateJoined) {
@@ -28,6 +31,7 @@ public class Farmer {
         this.address = address;
         this.profilePicture = profilePicture;
         this.dateJoined = dateJoined;
+        this.tokenCount = 0; // Default token count is 0
     }
 
     // Getters and Setters
@@ -109,5 +113,32 @@ public class Farmer {
 
     public void setDateJoined(String dateJoined) {
         this.dateJoined = dateJoined;
+    }
+
+    public Integer getTokenCount() {
+        return tokenCount;
+    }
+
+    public void setTokenCount(Integer tokenCount) {
+        this.tokenCount = tokenCount;
+    }
+    
+    // Helper methods for token management
+    public void addTokens(Integer tokens) {
+        if (tokens != null && tokens > 0) {
+            this.tokenCount = (this.tokenCount != null ? this.tokenCount : 0) + tokens;
+        }
+    }
+    
+    public boolean deductTokens(Integer tokens) {
+        if (tokens != null && tokens > 0 && this.tokenCount != null && this.tokenCount >= tokens) {
+            this.tokenCount -= tokens;
+            return true;
+        }
+        return false;
+    }
+    
+    public boolean hasEnoughTokens(Integer requiredTokens) {
+        return this.tokenCount != null && requiredTokens != null && this.tokenCount >= requiredTokens;
     }
 }

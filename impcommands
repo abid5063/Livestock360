@@ -12,6 +12,14 @@ powershell -ExecutionPolicy Bypass -File .\docker-script-fixed.ps1 run
 to stop image - 
 docker stop livestock360-backend
 
+# Stop all running containers
+docker stop $(docker ps -aq)
+
+# Remove all containers (stopped and running)
+docker rm $(docker ps -aq)
+
+
+
 Docker Hub Commands:
 1. Login to Docker Hub: docker login
 2. Tag image: docker tag livestock360-spring-backend:latest abidhasan83/livestock360-spring-backend:latest

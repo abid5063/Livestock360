@@ -127,6 +127,19 @@ public class VaccineService {
         }
     }
 
+    public boolean deleteByAnimalAndFarmer(String animalId, String farmerId) {
+        try {
+            MongoCollection<Document> collection = getVaccinesCollection();
+            return collection.deleteMany(Filters.and(
+                Filters.eq("animal", new ObjectId(animalId)),
+                Filters.eq("farmer", new ObjectId(farmerId))
+            )).getDeletedCount() >= 0;
+        } catch (Exception e) {
+            System.out.println("Error deleting vaccines for animal: " + e.getMessage());
+            return false;
+        }
+    }
+
     public Vaccine updateVaccine(Vaccine vaccine) {
         try {
             vaccine.setUpdatedAt(new Date());

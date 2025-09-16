@@ -2,7 +2,7 @@ import { Text, View, TouchableOpacity, StyleSheet, Image, SafeAreaView, StatusBa
 import { useRouter } from "expo-router";
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import { useLanguage } from "../utils/LanguageContext";
 import { useTranslation } from 'react-i18next';
 
@@ -154,6 +154,16 @@ export default function WelcomeScreen() {
           >
             <Ionicons name="storefront" size={28} color='#032001ff'/>
             <Text style={styles.buttonText}>{t('customer') || 'I\'m a Customer'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.optionButton, styles.adminButton]}
+            onPress={() => router.push('/adminAuth')}
+            testID="admin-option-button"
+            activeOpacity={0.8}
+          >
+            <Ionicons name="shield-checkmark" size={24} color='#fff'/>
+            <Text style={[styles.buttonText, styles.adminButtonText]}>Admin Portal</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -371,5 +381,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#fff',
     fontWeight: '600',
+  },
+  adminButton: {
+    backgroundColor: 'rgba(220, 53, 69, 0.85)',
+    borderColor: 'rgba(220, 53, 69, 0.3)',
+  },
+  adminButtonText: {
+    color: '#fff',
+    fontWeight: '700',
   },
 });

@@ -3,7 +3,10 @@ package com.livestock360.springbackend.controller;
 import com.livestock360.springbackend.model.Animal;
 import com.livestock360.springbackend.model.Farmer;
 import com.livestock360.springbackend.service.AnimalService;
+import com.livestock360.springbackend.service.CloudinaryService;
 import com.livestock360.springbackend.service.FarmerService;
+import com.livestock360.springbackend.service.TaskService;
+import com.livestock360.springbackend.service.VaccineService;
 import com.livestock360.springbackend.utils.JwtUtil;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +26,15 @@ public class AnimalController {
     
     @Autowired
     private FarmerService farmerService;
+    
+    @Autowired
+    private CloudinaryService cloudinaryService;
+    
+    @Autowired
+    private VaccineService vaccineService;
+    
+    @Autowired
+    private TaskService taskService;
 
     /**
      * GET /api/animals - Get all animals for authenticated farmer
@@ -31,8 +43,6 @@ public class AnimalController {
     @GetMapping
     public ResponseEntity<?> getAnimals(@RequestHeader("Authorization") String authHeader) {
         try {
-            System.out.println("📋 Get animals request received");
-            
             // Authenticate farmer
             String farmerId = authenticateRequest(authHeader);
             if (farmerId == null) {
@@ -50,10 +60,10 @@ public class AnimalController {
             // Get animals for this farmer
             List<Animal> animals = animalService.findByFarmerId(farmerId);
             
-            // Convert to response format (exactly like SimpleBackend)
-            List<Map<String, Object>> response = new ArrayList<>();
+            // REVERTED: Back to manual HashMap construction but optimized
+            List<Map<String, Object>> response = new ArrayList<>(animals.size());
             for (Animal animal : animals) {
-                Map<String, Object> animalData = new HashMap<>();
+                Map<String, Object> animalData = new HashMap<>(8); // Pre-sized HashMap
                 animalData.put("_id", animal.getId().toString());
                 animalData.put("name", animal.getName());
                 animalData.put("type", animal.getType());
@@ -62,16 +72,14 @@ public class AnimalController {
                 animalData.put("gender", animal.getGender());
                 animalData.put("details", animal.getDetails());
                 animalData.put("photo_url", animal.getPhoto_url());
-                animalData.put("createdAt", animal.getCreatedAt());
                 response.add(animalData);
             }
             
-            System.out.println("✅ Retrieved " + response.size() + " animals for farmer: " + farmer.getName());
+            System.out.println("✅ Retrieved " + animals.size() + " animals for farmer: " + farmer.getName());
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            System.out.println("❌ Error getting animals: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("❌ Error getting animals: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Collections.singletonMap("message", "Failed to fetch animals"));
         }
@@ -131,6 +139,20 @@ public class AnimalController {
                     .body(Collections.singletonMap("message", "Invalid age format"));
             }
             
+            // Handle image upload if provided - replicating Node.js logic
+            String photo_url = "";
+            if (image != null && !image.trim().isEmpty()) {
+                System.out.println("typeof image: " + image.getClass().getSimpleName());
+                System.out.println("image starts with: " + (image.length() > 30 ? image.substring(0, 30) : image));
+                try {
+                    photo_url = cloudinaryService.uploadImage(image);
+                } catch (Exception uploadError) {
+                    System.err.println("❌ Error uploading image to Cloudinary: " + uploadError.getMessage());
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(Collections.singletonMap("message", "Failed to upload image"));
+                }
+            }
+            
             // Create animal
             Animal animal = new Animal();
             animal.setName(name);
@@ -139,7 +161,7 @@ public class AnimalController {
             animal.setAge(age);
             animal.setGender(gender);
             animal.setDetails(details != null ? details : "");
-            animal.setPhoto_url(image != null ? image : "");
+            animal.setPhoto_url(photo_url);
             animal.setFarmer(new ObjectId(farmerId));
             animal.setCreatedAt(new Date());
             
@@ -313,23 +335,39 @@ public class AnimalController {
                     .body(Collections.singletonMap("message", "Access denied. No token provided."));
             }
             
-            // Check if animal exists and belongs to farmer
+            // 1. Find the animal first (replicating Node.js logic)
             Animal animal = animalService.findByFarmerAndId(farmerId, id);
             if (animal == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Collections.singletonMap("message", "Animal not found"));
+                    .body(Collections.singletonMap("message", "Animal not found in your farm"));
             }
             
-            // Delete the animal
+            // 2. Delete all vaccine records for this animal (replicating Node.js logic)
+            vaccineService.deleteByAnimalAndFarmer(id, farmerId);
+            
+            // 3. Delete all task records for this animal (replicating Node.js logic)
+            taskService.deleteByAnimalAndFarmer(id, farmerId);
+            
+            // 4. Delete image from cloudinary if needed (replicating Node.js logic)
+            if (animal.getPhoto_url() != null && animal.getPhoto_url().contains("cloudinary")) {
+                try {
+                    cloudinaryService.deleteImage(animal.getPhoto_url());
+                } catch (Exception deleteError) {
+                    System.out.println("Error deleting image from cloudinary: " + deleteError.getMessage());
+                    // Continue with animal deletion even if image deletion fails
+                }
+            }
+            
+            // 5. Delete the animal from the database (replicating Node.js logic)
             boolean deleted = animalService.deleteByFarmerAndId(farmerId, id);
             if (!deleted) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Collections.singletonMap("message", "Failed to delete animal"));
             }
             
-            // Response (exactly like SimpleBackend)
+            // Response (replicating Node.js message)
             Map<String, String> response = new HashMap<>();
-            response.put("message", "Animal deleted successfully");
+            response.put("message", "Animal removed successfully");
             
             System.out.println("✅ Animal deleted: " + animal.getName());
             return ResponseEntity.ok(response);

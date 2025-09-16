@@ -259,6 +259,7 @@ public class FarmerService {
             farmer.setAddress(doc.getString("address"));
             farmer.setProfilePicture(doc.getString("profilePicture"));
             farmer.setDateJoined(doc.getString("dateJoined"));
+            farmer.setTokenCount(doc.getInteger("tokenCount", 0)); // Default to 0 if not present
             return farmer;
         } catch (Exception e) {
             System.out.println("Error converting document to farmer: " + e.getMessage());
@@ -279,7 +280,8 @@ public class FarmerService {
            .append("location", farmer.getLocation())
            .append("address", farmer.getAddress())
            .append("profilePicture", farmer.getProfilePicture())
-           .append("dateJoined", farmer.getDateJoined());
+           .append("dateJoined", farmer.getDateJoined())
+           .append("tokenCount", farmer.getTokenCount() != null ? farmer.getTokenCount() : 0);
         return doc;
     }
 }

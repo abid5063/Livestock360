@@ -1,6 +1,6 @@
 // API Configuration for AGL Mobile App
 export const API_BASE_URL = 'http://localhost:5000';
-// export const API_BASE_URL = 'http://57.158.25.157:80';
+// export const API_BASE_URL = 'http://52.184.80.117:80';
 export const ALL_ALERTS = false;
 // For development, you can use:
 // export const API_BASE_URL = 'http://10.0.2.2:5000'; // Android Emulator

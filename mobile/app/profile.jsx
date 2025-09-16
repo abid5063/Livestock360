@@ -22,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { API_BASE_URL, ALL_ALERTS } from '../utils/apiConfig'; // Adjust the import path as needed
 import { useLanguage } from "../utils/LanguageContext";
 import { useTranslation } from 'react-i18next';
+import TokenNotification from '../utils/TokenNotification.jsx';
 const { width } = Dimensions.get('window');
 
 export default function Profile() {
@@ -42,6 +43,8 @@ export default function Profile() {
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [conversationMessages, setConversationMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [tokenBalance, setTokenBalance] = useState(0);
+  const [showTokenNotification, setShowTokenNotification] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -81,6 +84,7 @@ export default function Profile() {
         }
         setFarmer(parsedFarmer);
         await fetchAnimals(token);
+        await fetchTokenBalance(token);
         await fetchConversations();
         await fetchVets();
       } catch (error) {
@@ -115,6 +119,31 @@ export default function Profile() {
           Alert.alert(t('alerts.error'), t('alerts.failedToFetchAnimals'));
         }
       }
+    }
+  };
+
+  const fetchTokenBalance = async (token) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/auth/farmers/token-balance`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (response.data.success) {
+        const balance = response.data.tokenBalance;
+        setTokenBalance(balance);
+        
+        // Show notification if token balance is low
+        if (balance <= 5 && balance > 0) {
+          // Delay showing notification to avoid showing immediately on load
+          setTimeout(() => {
+            setShowTokenNotification(true);
+          }, 2000);
+        }
+      }
+    } catch (_error) {
+      // Silently fail for token balance - not critical
+      console.log('Failed to fetch token balance:', _error.message);
     }
   };
 
@@ -402,6 +431,11 @@ export default function Profile() {
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer}>
       <View style={styles.container}>
+        {/* Token Notification */}
+        <TokenNotification 
+          visible={showTokenNotification}
+          onDismiss={() => setShowTokenNotification(false)}
+        />
         {/* Header Section */}
         <View style={styles.headerSection}>
           <View style={styles.headerContent}>
@@ -450,6 +484,37 @@ export default function Profile() {
             <Text style={styles.statNumber}>{t('profile.active')}</Text>
             <Text style={styles.statLabel}>{t('profile.status')}</Text>
           </View>
+        </View>
+
+        {/* Subscription Section */}
+        <View style={styles.subscriptionContainer}>
+          <View style={styles.subscriptionHeader}>
+            <View style={styles.tokenBalanceSection}>
+              <View style={styles.tokenIconContainer}>
+                <Ionicons name="diamond" size={24} color="#FFD700" />
+              </View>
+              <View style={styles.tokenInfo}>
+                <Text style={styles.tokenBalanceLabel}>Token Balance</Text>
+                <Text style={styles.tokenBalanceNumber}>{tokenBalance}</Text>
+              </View>
+            </View>
+            <TouchableOpacity 
+              style={styles.subscriptionButton}
+              onPress={() => router.push('/addSubscription')}
+              testID="add-subscription-button"
+            >
+              <Ionicons name="add-circle" size={20} color="#fff" />
+              <Text style={styles.subscriptionButtonText}>Add Subscription</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity 
+            style={styles.subscriptionHistoryButton}
+            onPress={() => router.push('/subscriptionHistory')}
+            testID="subscription-history-button"
+          >
+            <Ionicons name="time" size={16} color="#666" />
+            <Text style={styles.subscriptionHistoryText}>View Subscription History</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Main Features Grid */}
@@ -1614,5 +1679,83 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "bold",
+  },
+  // Subscription Section Styles
+  subscriptionContainer: {
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginVertical: 16,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  subscriptionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  tokenBalanceSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  tokenIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#FFF8DC",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  tokenInfo: {
+    flex: 1,
+  },
+  tokenBalanceLabel: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 2,
+  },
+  tokenBalanceNumber: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#FFD700",
+  },
+  subscriptionButton: {
+    backgroundColor: "#4CAF50",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  subscriptionButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  subscriptionHistoryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#f5f5f5",
+    gap: 8,
+  },
+  subscriptionHistoryText: {
+    color: "#666",
+    fontSize: 14,
   },
 });

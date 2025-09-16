@@ -169,6 +169,21 @@ public class TaskService {
         }
     }
 
+    public boolean deleteByAnimalAndFarmer(String animalId, String farmerId) {
+        try {
+            MongoCollection<Document> collection = getTasksCollection();
+            return collection.deleteMany(
+                Filters.and(
+                    Filters.eq("animal", new ObjectId(animalId)),
+                    Filters.eq("farmer", new ObjectId(farmerId))
+                )
+            ).getDeletedCount() >= 0;
+        } catch (Exception e) {
+            System.out.println("Error deleting tasks for animal: " + e.getMessage());
+            return false;
+        }
+    }
+
     public Task updateTask(Task task) {
         try {
             task.setUpdatedAt(new Date());
