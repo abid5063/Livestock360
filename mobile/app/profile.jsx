@@ -45,6 +45,17 @@ export default function Profile() {
   const [newMessage, setNewMessage] = useState('');
   const [tokenBalance, setTokenBalance] = useState(0);
   const [showTokenNotification, setShowTokenNotification] = useState(false);
+  const [showSellProductsModal, setShowSellProductsModal] = useState(false);
+  const [isSellingEnabled, setIsSellingEnabled] = useState(false);
+  const [productSettings, setProductSettings] = useState({
+    MILK_COW: false,
+    MILK_BUFFALO: false,
+    MILK_GOAT: false,
+    BUTTER: false,
+    EGGS_HEN: false,
+    EGGS_DUCK: false
+  });
+  const [loadingProductSettings, setLoadingProductSettings] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -60,6 +71,13 @@ export default function Profile() {
     i18n.changeLanguage(language);
   }, [language, i18n]);
 
+  // Load farmer's current product selling status
+  useEffect(() => {
+    if (farmer) {
+      loadProductSettings();
+    }
+  }, [farmer]);
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -72,16 +90,20 @@ export default function Profile() {
         let parsedFarmer = null;
         if (params.farmer) {
           parsedFarmer = JSON.parse(params.farmer);
+          console.log('📄 Farmer from params:', parsedFarmer);
         } else {
           const storedData = await AsyncStorage.getItem('userData');
           if (storedData) {
             parsedFarmer = JSON.parse(storedData);
+            console.log('💾 Farmer from storage:', parsedFarmer);
           }
         }
         if (!parsedFarmer) {
           router.replace('/');
           return;
         }
+        console.log('👤 Setting farmer with properties:', Object.keys(parsedFarmer));
+        console.log('🆔 Farmer ID check - _id:', parsedFarmer._id, 'id:', parsedFarmer.id);
         setFarmer(parsedFarmer);
         await fetchAnimals(token);
         await fetchTokenBalance(token);
@@ -120,6 +142,110 @@ export default function Profile() {
         }
       }
     }
+  };
+
+  const loadProductSettings = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token || !farmer?.id) return;
+
+      const response = await axios.get(`${API_BASE_URL}/api/products/farmer/${farmer.id}/products`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (response.data.success) {
+        const farmerData = response.data.farmer;
+        setIsSellingEnabled(farmerData.isSeller || false);
+        setProductSettings({
+          MILK_COW: farmerData.sellingStatus?.sellsMilkCow || false,
+          MILK_BUFFALO: farmerData.sellingStatus?.sellsMilkBuffalo || false,
+          MILK_GOAT: farmerData.sellingStatus?.sellsMilkGoat || false,
+          BUTTER: farmerData.sellingStatus?.sellsButter || false,
+          EGGS_HEN: farmerData.sellingStatus?.sellsHenEggs || false,
+          EGGS_DUCK: farmerData.sellingStatus?.sellsDuckEggs || false
+        });
+      }
+    } catch (error) {
+      console.log('Failed to load product settings:', error.message);
+    }
+  };
+
+  const updateProductSettings = async () => {
+    console.log('🚀 Updating product settings for farmer:', farmer.id);
+    
+    if (!farmer?.id) {
+      console.log('No farmer ID found, exiting early');
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.error'), t('alerts.noFarmerData'));
+      }
+      return;
+    }
+
+    console.log('Farmer ID found, proceeding with API call');
+    setLoadingProductSettings(true);
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      console.log('Token retrieved:', token ? 'Token exists' : 'No token');
+      console.log('API URL:', `${API_BASE_URL}/api/products/farmer/enable`);
+      console.log('Request data:', {
+        farmerId: farmer.id,
+        enableSelling: isSellingEnabled,
+        products: isSellingEnabled ? productSettings : {}
+      });
+      
+      const response = await axios.put(
+        `${API_BASE_URL}/api/products/farmer/enable`,
+        {
+          farmerId: farmer.id,
+          enableSelling: isSellingEnabled,
+          products: isSellingEnabled ? productSettings : {}
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      console.log('API Response:', response.data);
+
+      if (response.data.success) {
+        setShowSellProductsModal(false);
+        if (ALL_ALERTS) {
+          Alert.alert(
+            t('alerts.success'), 
+            isSellingEnabled 
+              ? t('alerts.productSellingEnabled') 
+              : t('alerts.productSellingDisabled')
+          );
+        }
+        // Refresh the settings
+        await loadProductSettings();
+      } else {
+        if (ALL_ALERTS) {
+          Alert.alert(t('alerts.error'), response.data.message || t('alerts.failedToUpdateSettings'));
+        }
+      }
+    } catch (error) {
+      console.error('Error updating product settings:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      if (ALL_ALERTS) {
+        Alert.alert(t('alerts.error'), error.response?.data?.message || t('alerts.failedToUpdateSettings'));
+      }
+    } finally {
+      console.log('updateProductSettings finished, setting loading to false');
+      setLoadingProductSettings(false);
+    }
+  };
+
+  const toggleProductSetting = (productType) => {
+    setProductSettings(prev => ({
+      ...prev,
+      [productType]: !prev[productType]
+    }));
   };
 
   const fetchTokenBalance = async (token) => {
@@ -650,6 +776,32 @@ export default function Profile() {
               <Text style={styles.featureTitle}>{t('profile.nutrition')}</Text>
               <Text style={styles.featureSubtitle}>{t('profile.feedSuggestions')}</Text>
             </TouchableOpacity>
+
+            {/* Sell Products */}
+            <TouchableOpacity
+              style={[styles.featureCard, styles.sellProductsCard]}
+              onPress={() => setShowSellProductsModal(true)}
+              testID="sell-products-button"
+            >
+              <View style={styles.featureIconContainer}>
+                <Ionicons name="storefront" size={28} color="#fff" />
+              </View>
+              <Text style={styles.featureTitle}>{t('profile.sellProducts')}</Text>
+              <Text style={styles.featureSubtitle}>{t('profile.manageProductSales')}</Text>
+            </TouchableOpacity>
+
+            {/* Manage Orders */}
+            <TouchableOpacity
+              style={[styles.featureCard, styles.manageOrdersCard]}
+              onPress={() => router.push('/farmerOrderManagement')}
+              testID="manage-orders-button"
+            >
+              <View style={styles.featureIconContainer}>
+                <Ionicons name="receipt" size={28} color="#fff" />
+              </View>
+              <Text style={styles.featureTitle}>{t('profile.manageOrders')}</Text>
+              <Text style={styles.featureSubtitle}>{t('profile.viewCustomerOrders')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -1072,6 +1224,160 @@ export default function Profile() {
               contentContainerStyle={styles.modalContent}
               showsVerticalScrollIndicator={false}
             />
+          </View>
+        </Modal>
+
+        {/* Sell Products Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showSellProductsModal}
+          onRequestClose={() => setShowSellProductsModal(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{t('profile.sellProductsModal.title')}</Text>
+              
+              {/* Enable/Disable Selling Toggle */}
+              <View style={styles.toggleContainer}>
+                <Text style={styles.toggleLabel}>{t('profile.sellProductsModal.enableSelling')}</Text>
+                <TouchableOpacity
+                  style={[styles.toggleButton, isSellingEnabled && styles.toggleButtonActive]}
+                  onPress={() => setIsSellingEnabled(!isSellingEnabled)}
+                  testID="enable-selling-toggle"
+                >
+                  <View style={[styles.toggleIndicator, isSellingEnabled && styles.toggleIndicatorActive]} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Product Selection */}
+              {isSellingEnabled && (
+                <View style={styles.productSelectionContainer}>
+                  <Text style={styles.productSelectionTitle}>{t('profile.sellProductsModal.selectProducts')}</Text>
+                  
+                  {/* Dairy Products */}
+                  <View style={styles.productCategory}>
+                    <Text style={styles.categoryTitle}>{t('profile.sellProductsModal.dairyProducts')}</Text>
+                    
+                    <TouchableOpacity
+                      style={styles.productItem}
+                      onPress={() => toggleProductSetting('MILK_COW')}
+                      testID="product-milk-cow"
+                    >
+                      <View style={styles.productInfo}>
+                        <Ionicons name="water" size={20} color="#8B4513" />
+                        <Text style={styles.productName}>{t('profile.sellProductsModal.cowMilk')}</Text>
+                      </View>
+                      <View style={[styles.checkbox, productSettings.MILK_COW && styles.checkboxActive]}>
+                        {productSettings.MILK_COW && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.productItem}
+                      onPress={() => toggleProductSetting('MILK_BUFFALO')}
+                      testID="product-milk-buffalo"
+                    >
+                      <View style={styles.productInfo}>
+                        <Ionicons name="water" size={20} color="#4B4B4D" />
+                        <Text style={styles.productName}>{t('profile.sellProductsModal.buffaloMilk')}</Text>
+                      </View>
+                      <View style={[styles.checkbox, productSettings.MILK_BUFFALO && styles.checkboxActive]}>
+                        {productSettings.MILK_BUFFALO && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.productItem}
+                      onPress={() => toggleProductSetting('MILK_GOAT')}
+                      testID="product-milk-goat"
+                    >
+                      <View style={styles.productInfo}>
+                        <Ionicons name="water" size={20} color="#F5DEB3" />
+                        <Text style={styles.productName}>{t('profile.sellProductsModal.goatMilk')}</Text>
+                      </View>
+                      <View style={[styles.checkbox, productSettings.MILK_GOAT && styles.checkboxActive]}>
+                        {productSettings.MILK_GOAT && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.productItem}
+                      onPress={() => toggleProductSetting('BUTTER')}
+                      testID="product-butter"
+                    >
+                      <View style={styles.productInfo}>
+                        <Ionicons name="cube" size={20} color="#FFD700" />
+                        <Text style={styles.productName}>{t('profile.sellProductsModal.freshButter')}</Text>
+                      </View>
+                      <View style={[styles.checkbox, productSettings.BUTTER && styles.checkboxActive]}>
+                        {productSettings.BUTTER && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Poultry Products */}
+                  <View style={styles.productCategory}>
+                    <Text style={styles.categoryTitle}>{t('profile.sellProductsModal.poultryProducts')}</Text>
+                    
+                    <TouchableOpacity
+                      style={styles.productItem}
+                      onPress={() => toggleProductSetting('EGGS_HEN')}
+                      testID="product-eggs-hen"
+                    >
+                      <View style={styles.productInfo}>
+                        <Ionicons name="ellipse" size={20} color="#F4A460" />
+                        <Text style={styles.productName}>{t('profile.sellProductsModal.henEggs')}</Text>
+                      </View>
+                      <View style={[styles.checkbox, productSettings.EGGS_HEN && styles.checkboxActive]}>
+                        {productSettings.EGGS_HEN && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.productItem}
+                      onPress={() => toggleProductSetting('EGGS_DUCK')}
+                      testID="product-eggs-duck"
+                    >
+                      <View style={styles.productInfo}>
+                        <Ionicons name="ellipse" size={20} color="#FFFACD" />
+                        <Text style={styles.productName}>{t('profile.sellProductsModal.duckEggs')}</Text>
+                      </View>
+                      <View style={[styles.checkbox, productSettings.EGGS_DUCK && styles.checkboxActive]}>
+                        {productSettings.EGGS_DUCK && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              
+              {/* Modal Buttons */}
+              <View style={styles.modalButtons}>
+                <Pressable
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setShowSellProductsModal(false);
+                    // Reset to current values
+                    loadProductSettings();
+                  }}
+                  testID="sell-products-cancel"
+                >
+                  <Text style={styles.cancelButtonText}>{t('profile.sellProductsModal.cancel')}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.modalButton, styles.saveButton, loadingProductSettings && styles.saveButtonDisabled]}
+                  onPress={updateProductSettings}
+                  disabled={loadingProductSettings}
+                  testID="sell-products-save"
+                >
+                  {loadingProductSettings ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>{t('profile.sellProductsModal.save')}</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
           </View>
         </Modal>
       </View>
@@ -1757,5 +2063,112 @@ const styles = StyleSheet.create({
   subscriptionHistoryText: {
     color: "#666",
     fontSize: 14,
+  },
+  // Sell Products Styles
+  sellProductsCard: {
+    backgroundColor: "#FF6B35",
+  },
+  manageOrdersCard: {
+    backgroundColor: "#9C27B0",
+  },
+  toggleContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#2c3e50",
+  },
+  toggleButton: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#ddd",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+  },
+  toggleButtonActive: {
+    backgroundColor: "#4CAF50",
+  },
+  toggleIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleIndicatorActive: {
+    alignSelf: "flex-end",
+  },
+  productSelectionContainer: {
+    marginBottom: 20,
+  },
+  productSelectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#2c3e50",
+    marginBottom: 16,
+  },
+  productCategory: {
+    marginBottom: 20,
+  },
+  categoryTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#34495e",
+    marginBottom: 12,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ecf0f1",
+  },
+  productItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  productInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  productName: {
+    fontSize: 16,
+    color: "#2c3e50",
+    marginLeft: 12,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#ddd",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  checkboxActive: {
+    backgroundColor: "#4CAF50",
+    borderColor: "#4CAF50",
+  },
+  saveButtonDisabled: {
+    backgroundColor: "#bdc3c7",
   },
 });

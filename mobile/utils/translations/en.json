@@ -89,6 +89,25 @@
     "findVets": {
       "title": "Find Veterinarians",
       "chatButton": "Chat"
+    },
+    "sellProducts": "Sell Products",
+    "manageProductSales": "Manage product sales",
+    "manageOrders": "Manage Orders",
+    "viewCustomerOrders": "View customer orders",
+    "sellProductsModal": {
+      "title": "Sell Products",
+      "enableSelling": "Enable Product Selling",
+      "selectProducts": "Select Products to Sell",
+      "dairyProducts": "Dairy Products",
+      "poultryProducts": "Poultry Products",
+      "cowMilk": "Cow Milk",
+      "buffaloMilk": "Buffalo Milk",
+      "goatMilk": "Goat Milk",
+      "freshButter": "Fresh Butter",
+      "henEggs": "Hen Eggs",
+      "duckEggs": "Duck Eggs",
+      "cancel": "Cancel",
+      "save": "Save Settings"
     }
   },
   
@@ -109,7 +128,11 @@
     "animalUpdatedSuccess": "Animal updated successfully",
     "failedToUpdateAnimal": "Failed to update animal",
     "failedToLoadConversation": "Failed to load conversation",
-    "failedToSendMessage": "Failed to send message"
+    "failedToSendMessage": "Failed to send message",
+    "noFarmerData": "No farmer data available",
+    "productSellingEnabled": "Product selling enabled successfully!",
+    "productSellingDisabled": "Product selling disabled successfully!",
+    "failedToUpdateSettings": "Failed to update product settings"
   },
   
   "animalDetails": {
@@ -724,5 +747,32 @@
     "growth": "Growth",
     "recommendation": "Recommendation",
     "reason": "Reason"
-  }
+  },
+  
+  "myOrders": "My Orders",
+  "loadingOrders": "Loading orders...",
+  "orderDetails": "Order Details",
+  "orderNumber": "Order Number",
+  "customer": "Customer",
+  "orderedProducts": "Ordered Products",
+  "totalAmount": "Total Amount",
+  "orderDate": "Order Date",
+  "confirmedAt": "Confirmed At",
+  "deliveredAt": "Delivered At",
+  "receivedAt": "Received At",
+  "confirmOrder": "Confirm Order",
+  "markAsDelivered": "Mark as Delivered",
+  "confirmOrderQuestion": "Are you sure you want to confirm the order from {{customerName}}?",
+  "markDeliveredQuestion": "Are you sure you want to mark the order from {{customerName}} as delivered?",
+  "confirmAction": "Confirm Action",
+  "orderConfirmedSuccessfully": "Order confirmed successfully!",
+  "orderMarkedAsDelivered": "Order marked as delivered successfully!",
+  "failedToUpdateOrder": "Failed to update order status",
+  "failedToLoadOrders": "Failed to load orders",
+  "noOrdersYet": "No Orders Yet",
+  "noOrdersMessage": "You haven't received any orders yet. Enable product selling in your profile to start receiving orders.",
+  "pending": "Pending",
+  "confirmed": "Confirmed",
+  "delivered": "Delivered",
+  "received": "Received"
 }

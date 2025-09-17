@@ -12,7 +12,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { API_BASE_URL } from '../utils/apiConfig';
+import { API_BASE_URL, ALL_ALERTS } from '../utils/apiConfig';
 
 const CustomerDashboard = () => {
   const [customerData, setCustomerData] = useState(null);
@@ -33,28 +33,20 @@ const CustomerDashboard = () => {
       const token = await AsyncStorage.getItem('customerToken');
       const storedData = await AsyncStorage.getItem('customerData');
       
+      console.log('🔑 Customer token exists:', !!token);
+      console.log('💾 Customer data exists:', !!storedData);
+      
       if (token && storedData) {
-        // Validate token by making a request to the backend
-        const response = await fetch(`${API_BASE_URL}/api/customers/profile`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          setCustomerData(JSON.parse(storedData));
-        } else {
-          // Token is invalid, clear storage and redirect
-          await AsyncStorage.multiRemove(['customerToken', 'customerData', 'userType']);
-          router.replace('/');
-        }
+        // Skip backend validation for now and just use stored data
+        console.log('✅ Loading customer data from storage');
+        setCustomerData(JSON.parse(storedData));
       } else {
         // No token or data, redirect to auth
+        console.log('❌ No customer token or data found, redirecting to login');
         router.replace('/');
       }
     } catch (error) {
-      console.error('Error loading customer data:', error);
+      console.error('❌ Error loading customer data:', error);
       // Clear potentially corrupted data and redirect
       await AsyncStorage.multiRemove(['customerToken', 'customerData', 'userType']);
       router.replace('/');
@@ -99,39 +91,45 @@ const CustomerDashboard = () => {
     setRefreshing(false);
   };
 
+  const performLogout = async () => {
+    try {
+      // Clear all customer-related data
+      await AsyncStorage.multiRemove(['customerToken', 'customerData', 'userType']);
+      
+      // Clear any cached data
+      setCustomerData(null);
+      setStats({
+        totalAnimalsAvailable: 0,
+        recentlyAdded: 0,
+        favoriteTypes: []
+      });
+      
+      // Navigate to the welcome screen and reset navigation stack
+      router.replace('/');
+    } catch (error) {
+      console.error('Error during logout:', error);
+      // Force navigation even if there's an error clearing storage
+      router.replace('/');
+    }
+  };
+
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Clear all customer-related data
-              await AsyncStorage.multiRemove(['customerToken', 'customerData', 'userType']);
-              
-              // Clear any cached data
-              setCustomerData(null);
-              setStats({
-                totalAnimalsAvailable: 0,
-                recentlyAdded: 0,
-                favoriteTypes: []
-              });
-              
-              // Navigate to the welcome screen and reset navigation stack
-              router.replace('/');
-            } catch (error) {
-              console.error('Error during logout:', error);
-              // Force navigation even if there's an error clearing storage
-              router.replace('/');
-            }
+    if (ALL_ALERTS) {
+      Alert.alert(
+        'Logout',
+        'Are you sure you want to logout?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Logout', 
+            style: 'destructive',
+            onPress: performLogout
           }
-        }
-      ]
-    );
+        ]
+      );
+    } else {
+      performLogout();
+    }
   };
 
   if (!customerData) {
@@ -199,6 +197,20 @@ const CustomerDashboard = () => {
             <View style={styles.actionContent}>
               <Text style={styles.actionTitle}>Animal Marketplace</Text>
               <Text style={styles.actionDescription}>Browse and search available animals</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={24} color="#ccc" />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.actionCard, styles.buyProductsCard]}
+            onPress={() => router.push('/buyProducts')}
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons name="basket" size={30} color="#FF6B35" />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Buy Products</Text>
+              <Text style={styles.actionDescription}>Order milk, butter, and eggs from local farmers</Text>
             </View>
             <MaterialIcons name="chevron-right" size={24} color="#ccc" />
           </TouchableOpacity>
@@ -411,6 +423,10 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
     textAlign: 'right',
+  },
+  buyProductsCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B35',
   },
 });
 

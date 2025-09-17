@@ -6,7 +6,10 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform,
+  Share,
+  Linking
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -14,6 +17,7 @@ import axios from 'axios';
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
 import { deductTokens, checkTokenSufficiency, TOKEN_COSTS } from '../utils/tokenUtils';
+import * as FileSystem from 'expo-file-system';
 
 const IMPORTANT_SYMPTOMS = [
   "fever",
@@ -132,6 +136,390 @@ export default function ProMode() {
     setPrediction(null);
   };
 
+  const generatePDFReport = async () => {
+    if (!prediction) {
+      Alert.alert(t('proMode.error'), 'No prediction data available to export');
+      return;
+    }
+
+    try {
+      // Get selected symptoms for the report
+      const selectedSymptomsArray = Object.entries(selectedSymptoms)
+        .filter(([_, value]) => value === 1)
+        .map(([symptom, _]) => symptom.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+
+      const currentDate = new Date().toLocaleDateString();
+      const currentTime = new Date().toLocaleTimeString();
+
+      // Check if we're running on web platform
+      const isWeb = Platform.OS === 'web';
+
+      // Create professional HTML content for PDF conversion
+      const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Livestock Disease Prediction Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #4a89dc;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 30px;
+            border-radius: 10px;
+        }
+        
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #4a89dc;
+            margin-bottom: 10px;
+        }
+        
+        .title {
+            font-size: 22px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+            page-break-inside: avoid;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+            background-color: #ecf0f1;
+            padding-left: 10px;
+            padding-right: 10px;
+            padding-top: 10px;
+        }
+        
+        .symptoms-container {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .symptoms-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 10px;
+        }
+        
+        .symptom-item {
+            background-color: #fff;
+            padding: 8px 12px;
+            border-radius: 20px;
+            border: 1px solid #bdc3c7;
+            font-size: 14px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .prediction-container {
+            background: linear-gradient(135deg, #e8f5e8 0%, #d5e8d5 100%);
+            border: 2px solid #27ae60;
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .diagnosis {
+            font-size: 24px;
+            font-weight: bold;
+            color: #27ae60;
+            margin-bottom: 15px;
+            text-transform: capitalize;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .status {
+            font-size: 18px;
+            color: #2c3e50;
+            background-color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            border: 1px solid #27ae60;
+            font-weight: 500;
+        }
+        
+        .disclaimer {
+            background-color: #fff3cd;
+            border: 2px solid #f39c12;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .disclaimer-title {
+            font-weight: bold;
+            color: #e67e22;
+            font-size: 16px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .disclaimer-text {
+            color: #8b4513;
+            line-height: 1.7;
+            font-size: 14px;
+        }
+        
+        .next-steps {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .steps-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        
+        .steps-list li {
+            padding: 5px 0;
+            position: relative;
+            padding-left: 25px;
+        }
+        
+        .steps-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #27ae60;
+            font-weight: bold;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            padding: 20px;
+            background-color: #34495e;
+            color: #fff;
+            border-radius: 8px;
+        }
+        
+        .footer-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .footer-text {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+        
+        @media print {
+            body { 
+                margin: 0;
+                box-shadow: none;
+            }
+            .header {
+                background: #f5f7fa !important;
+                -webkit-print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🏥 LIVESTOCK360</div>
+        <div class="title">Disease Prediction Report</div>
+        <div class="subtitle">Generated on ${currentDate} at ${currentTime}</div>
+        <div class="subtitle">Professional AI-Assisted Diagnosis</div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">📋 Selected Symptoms</div>
+        <div class="symptoms-container">
+            <p><strong>Total Symptoms Analyzed:</strong> ${selectedSymptomsArray.length}</p>
+            <div class="symptoms-grid">
+                ${selectedSymptomsArray.map(symptom => `<div class="symptom-item">• ${symptom}</div>`).join('')}
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🔍 AI Prediction Result</div>
+        <div class="prediction-container">
+            <div class="diagnosis">${prediction.prognosis}</div>
+            <div class="status">Status: ${prediction.status}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">📞 Recommended Next Steps</div>
+        <div class="next-steps">
+            <ul class="steps-list">
+                <li>Contact a licensed veterinarian immediately for professional consultation</li>
+                <li>Provide this report to your veterinarian along with additional observations</li>
+                <li>Follow all professional medical guidance and treatment recommendations</li>
+                <li>Monitor your livestock closely and document any changes in condition</li>
+                <li>Keep detailed records of symptoms and treatments for future reference</li>
+                <li>Consider isolating affected animals if recommended by your veterinarian</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="disclaimer">
+        <div class="disclaimer-title">⚠️ Important Medical Disclaimer</div>
+        <div class="disclaimer-text">
+            This prediction is generated by an artificial intelligence system and is provided for reference purposes only. 
+            It should not be considered as a substitute for professional veterinary diagnosis and treatment. 
+            Always consult with a qualified and licensed veterinarian for proper diagnosis, treatment recommendations, and ongoing care of your livestock. 
+            The accuracy of AI predictions may vary, and professional veterinary examination remains essential for proper animal healthcare.
+        </div>
+    </div>
+
+    <div class="footer">
+        <div class="footer-title">Livestock360 - Pro Mode Analysis</div>
+        <div class="footer-text">
+            This report was generated using advanced AI technology for livestock health assessment.<br>
+            For technical support or questions about this report, please contact our support team.<br>
+            Emergency veterinary services: Contact your local veterinary clinic immediately.
+        </div>
+    </div>
+</body>
+</html>`;
+
+      // Generate timestamp for filename
+      const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];
+      const filename = `Livestock_Diagnosis_Report_${timestamp}.html`;
+
+      if (isWeb) {
+        // Web platform: Create downloadable file
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create a temporary link element and trigger download
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        // Show success message for web
+        Alert.alert(
+          'PDF Report Downloaded Successfully! 📄',
+          `Your professional livestock diagnosis report has been downloaded as:\n\n${filename}\n\nTo convert to PDF:\n1. Open the downloaded HTML file in your browser\n2. Use browser's "Print" option (Ctrl+P)\n3. Select "Save as PDF" as destination\n4. Save to your desired location`
+        );
+
+      } else {
+        // Mobile platform: Use FileSystem
+        const fileUri = FileSystem.documentDirectory + filename;
+        await FileSystem.writeAsStringAsync(fileUri, htmlContent, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+
+        // Show options for accessing the report on mobile
+      Alert.alert(
+        'PDF Report Generated Successfully! 📄',
+        `Your professional livestock diagnosis report has been created and saved.\n\nFilename: ${filename}\n\nChoose how you'd like to access it:`,
+        [
+          { text: 'View File Location', onPress: () => {
+              Alert.alert(
+                'File Location 📁', 
+                `Your report is saved at:\n\n${fileUri}\n\nTo convert to PDF:\n\n1. Open this file in any browser\n2. Use browser's "Print" option\n3. Select "Save as PDF"\n4. Choose your desired location\n\nThe file is also accessible through your device's file manager.`
+              );
+            }
+          },
+          { 
+            text: 'Share Report 📤', 
+            onPress: async () => {
+              try {
+                // Share the HTML file
+                await Share.share({
+                  url: fileUri,
+                  title: 'Livestock Disease Diagnosis Report',
+                  message: 'Livestock disease diagnosis report generated by Livestock360 Pro Mode. Open in browser and save as PDF for best results.'
+                });
+              } catch (shareError) {
+                console.error('Error sharing file:', shareError);
+                Alert.alert('Share Options', 'File saved to device storage. You can find it in your file manager and share from there.');
+              }
+            }
+          },
+          { 
+            text: 'Open in Browser 🌐', 
+            onPress: async () => {
+              try {
+                // Try to open the HTML file in default browser
+                const canOpen = await Linking.canOpenURL(fileUri);
+                if (canOpen) {
+                  await Linking.openURL(fileUri);
+                } else {
+                  // If direct opening fails, provide instructions
+                  Alert.alert(
+                    'Manual Opening Required',
+                    `Please manually open the file:\n\n${fileUri}\n\nUsing your device's file manager, then select "Open with Browser" to view and save as PDF.`
+                  );
+                }
+              } catch (openError) {
+                console.error('Error opening file:', openError);
+                Alert.alert(
+                  'Opening Instructions',
+                  `File saved successfully!\n\nTo open:\n1. Go to your file manager\n2. Navigate to Downloads or Documents\n3. Find: ${filename}\n4. Open with any browser\n5. Use Print > Save as PDF`
+                );
+              }
+            }
+          }
+        ]
+      );
+      }
+
+    } catch (error) {
+      console.error('Error generating PDF report:', error);
+      Alert.alert(
+        t('proMode.error'), 
+        'Failed to generate PDF report. Please try again.'
+      );
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -209,6 +597,18 @@ export default function ProMode() {
                 {prediction.status}
               </Text>
             </View>
+            
+            <TouchableOpacity
+              style={styles.downloadButton}
+              onPress={generatePDFReport}
+              testID="download-report-button"
+            >
+              <Ionicons name="document-text-outline" size={20} color="#fff" />
+              <Text style={styles.downloadButtonText}>
+                Download PDF Report
+              </Text>
+            </TouchableOpacity>
+            
             <Text style={styles.recommendationText}>
               {t('proMode.recommendationText')}
             </Text>
@@ -341,6 +741,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e0e0e0',
     marginBottom: 12,
+  },
+  downloadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4a89dc',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  downloadButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   diagnosisLabel: {
     fontSize: 14,

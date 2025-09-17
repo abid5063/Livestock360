@@ -6,6 +6,7 @@ com\livestock360\springbackend\model\Appointment.class
 com\livestock360\springbackend\service\SubscriptionService.class
 com\livestock360\springbackend\model\Message.class
 com\livestock360\springbackend\service\TaskService.class
+com\livestock360\springbackend\controller\ProductController.class
 com\livestock360\springbackend\service\FarmerService.class
 com\livestock360\springbackend\controller\AdminController.class
 com\livestock360\springbackend\dto\RefreshRequest.class
@@ -13,6 +14,7 @@ com\livestock360\springbackend\service\AnimalService.class
 com\livestock360\springbackend\dto\RegisterRequest.class
 com\livestock360\springbackend\config\AdminInitializer.class
 com\livestock360\springbackend\service\AppointmentService.class
+com\livestock360\springbackend\controller\OrderController.class
 com\livestock360\springbackend\controller\AnimalMarketplaceController.class
 com\livestock360\springbackend\model\Vet.class
 com\livestock360\springbackend\config\MongoConfig.class
@@ -24,14 +26,17 @@ com\livestock360\springbackend\controller\AppointmentController.class
 com\livestock360\springbackend\controller\MessageController.class
 com\livestock360\springbackend\service\AdminService.class
 com\livestock360\springbackend\service\MessageService.class
+com\livestock360\springbackend\service\ProductService.class
 com\livestock360\springbackend\utils\JwtUtil.class
 com\livestock360\springbackend\utils\PasswordUtil.class
 com\livestock360\springbackend\controller\AnimalController.class
 com\livestock360\springbackend\controller\SubscriptionController.class
 com\livestock360\springbackend\dto\LoginRequest.class
 com\livestock360\springbackend\service\VetService.class
+com\livestock360\springbackend\model\Order.class
 com\livestock360\springbackend\service\CustomerService.class
 com\livestock360\springbackend\service\VaccineService.class
+com\livestock360\springbackend\service\OrderService.class
 com\livestock360\springbackend\Livestock360SpringBackendApplication.class
 com\livestock360\springbackend\model\Task.class
 com\livestock360\springbackend\controller\TaskController.class

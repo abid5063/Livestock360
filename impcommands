@@ -1,7 +1,7 @@
 to run front end - 
 cd backendJavaSimple; mvn clean compile
 mvn exec:java
-
+cd sprBack; mvn spring-boot:run
 
 
 
@@ -26,3 +26,8 @@ Docker Hub Commands:
 3. Push image: docker push abidhasan83/livestock360-spring-backend:latest
 
 Note: You need to create the repository 'livestock360-spring-backend' on Docker Hub first at https://hub.docker.com
+
+
+
+
+In this file look the api key is in the front end, how ever I dont want to leave any api key in the front end, rather create an api in the backend that 

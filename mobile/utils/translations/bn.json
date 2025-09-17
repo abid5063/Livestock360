@@ -89,6 +89,25 @@
     "findVets": {
       "title": "পশু চিকিৎসক খুঁজুন",
       "chatButton": "চ্যাট"
+    },
+    "sellProducts": "পণ্য বিক্রয়",
+    "manageProductSales": "পণ্য বিক্রয় পরিচালনা",
+    "manageOrders": "অর্ডার পরিচালনা",
+    "viewCustomerOrders": "গ্রাহকের অর্ডার দেখুন",
+    "sellProductsModal": {
+      "title": "পণ্য বিক্রয়",
+      "enableSelling": "পণ্য বিক্রয় সক্ষম করুন",
+      "selectProducts": "বিক্রয়ের জন্য পণ্য নির্বাচন করুন",
+      "dairyProducts": "দুগ্ধজাত পণ্য",
+      "poultryProducts": "পোল্ট্রি পণ্য",
+      "cowMilk": "গরুর দুধ",
+      "buffaloMilk": "মহিষের দুধ",
+      "goatMilk": "ছাগলের দুধ",
+      "freshButter": "তাজা মাখন",
+      "henEggs": "মুরগির ডিম",
+      "duckEggs": "হাঁসের ডিম",
+      "cancel": "বাতিল",
+      "save": "সেটিংস সংরক্ষণ করুন"
     }
   },
   
@@ -109,7 +128,11 @@
     "animalUpdatedSuccess": "পশু সফলভাবে আপডেট করা হয়েছে",
     "failedToUpdateAnimal": "পশু আপডেট করতে ব্যর্থ",
     "failedToLoadConversation": "কথোপকথন লোড করতে ব্যর্থ",
-    "failedToSendMessage": "বার্তা পাঠাতে ব্যর্থ"
+    "failedToSendMessage": "বার্তা পাঠাতে ব্যর্থ",
+    "noFarmerData": "কোন কৃষক ডেটা উপলব্ধ নেই",
+    "productSellingEnabled": "পণ্য বিক্রয় সফলভাবে সক্ষম হয়েছে!",
+    "productSellingDisabled": "পণ্য বিক্রয় সফলভাবে নিষ্ক্রিয় হয়েছে!",
+    "failedToUpdateSettings": "পণ্য সেটিংস আপডেট করতে ব্যর্থ"
   },
   
   "animalDetails": {
@@ -724,5 +747,32 @@
     "growth": "বৃদ্ধি",
     "recommendation": "পরামর্শ",
     "reason": "কারণ"
-  }
+  },
+  
+  "myOrders": "আমার অর্ডার",
+  "loadingOrders": "অর্ডার লোড হচ্ছে...",
+  "orderDetails": "অর্ডারের বিস্তারিত",
+  "orderNumber": "অর্ডার নম্বর",
+  "customer": "গ্রাহক",
+  "orderedProducts": "অর্ডারকৃত পণ্য",
+  "totalAmount": "মোট পরিমাণ",
+  "orderDate": "অর্ডারের তারিখ",
+  "confirmedAt": "নিশ্চিত করা হয়েছে",
+  "deliveredAt": "ডেলিভারি হয়েছে",
+  "receivedAt": "গৃহীত হয়েছে",
+  "confirmOrder": "অর্ডার নিশ্চিত করুন",
+  "markAsDelivered": "ডেলিভারিকৃত হিসেবে চিহ্নিত করুন",
+  "confirmOrderQuestion": "আপনি কি নিশ্চিত যে {{customerName}} এর অর্ডার নিশ্চিত করতে চান?",
+  "markDeliveredQuestion": "আপনি কি নিশ্চিত যে {{customerName}} এর অর্ডার ডেলিভারিকৃত হিসেবে চিহ্নিত করতে চান?",
+  "confirmAction": "পদক্ষেপ নিশ্চিত করুন",
+  "orderConfirmedSuccessfully": "অর্ডার সফলভাবে নিশ্চিত হয়েছে!",
+  "orderMarkedAsDelivered": "অর্ডার সফলভাবে ডেলিভারিকৃত হিসেবে চিহ্নিত হয়েছে!",
+  "failedToUpdateOrder": "অর্ডারের স্ট্যাটাস আপডেট করতে ব্যর্থ",
+  "failedToLoadOrders": "অর্ডার লোড করতে ব্যর্থ",
+  "noOrdersYet": "এখনো কোন অর্ডার নেই",
+  "noOrdersMessage": "আপনি এখনো কোন অর্ডার পাননি। অর্ডার পেতে আপনার প্রোফাইলে পণ্য বিক্রয় সক্রিয় করুন।",
+  "pending": "অপেক্ষমান",
+  "confirmed": "নিশ্চিত",
+  "delivered": "ডেলিভারিকৃত",
+  "received": "গৃহীত"
 } 
