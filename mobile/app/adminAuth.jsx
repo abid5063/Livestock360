@@ -66,7 +66,7 @@ export default function AdminAuth() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={['#dc3545', '#c82333', '#a71e2a']}
+        colors={['#ffffff', '#f8f9fa', '#ffffff']}
         style={styles.gradientBackground}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -86,7 +86,7 @@ export default function AdminAuth() {
               style={styles.backButton}
               onPress={() => router.back()}
             >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
+              <Ionicons name="arrow-back" size={24} color="#2E7D32" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Admin Portal</Text>
             <View style={styles.placeholder} />
@@ -95,7 +95,7 @@ export default function AdminAuth() {
           {/* Logo Section */}
           <View style={styles.logoSection}>
             <View style={styles.logoContainer}>
-              <Ionicons name="shield-checkmark" size={64} color="#fff" />
+              <Ionicons name="shield-checkmark" size={64} color="#2E7D32" />
             </View>
             <Text style={styles.logoText}>Administrator Access</Text>
             <Text style={styles.logoSubtext}>Secure Login Required</Text>
@@ -151,9 +151,9 @@ export default function AdminAuth() {
 
               {/* Default Admin Info */}
               <View style={styles.infoContainer}>
-                <Ionicons name="information-circle" size={16} color="rgba(255,255,255,0.8)" />
+                <Ionicons name="information-circle" size={16} color="#4CAF50" />
                 <Text style={styles.infoText}>
-                  Default: admin@gmail.com / 654321
+                  FIXED CREDENTIALS
                 </Text>
               </View>
 
@@ -177,7 +177,7 @@ export default function AdminAuth() {
 
           {/* Security Notice */}
           <View style={styles.securityNotice}>
-            <Ionicons name="shield" size={16} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="shield" size={16} color="#81C784" />
             <Text style={styles.securityText}>
               This area is restricted to authorized administrators only.
             </Text>
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#2E7D32',
   },
   placeholder: {
     width: 40,
@@ -232,23 +232,28 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#E8F5E8',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: '#4CAF50',
+    shadowColor: '#2E7D32',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   logoText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#2E7D32',
     marginBottom: 8,
     textAlign: 'center',
   },
   logoSubtext: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#4CAF50',
     textAlign: 'center',
   },
   formSection: {
@@ -256,19 +261,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   formContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 24,
-    backdropFilter: 'blur(10px)',
+    shadowColor: '#2E7D32',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#E8F5E8',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: '#F8F9FA',
     borderRadius: 12,
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 56,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   inputIconContainer: {
     marginRight: 12,
@@ -289,19 +302,23 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#4CAF50',
     marginLeft: 8,
     fontFamily: 'monospace',
+    fontWeight: '600',
   },
   loginButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#2E7D32',
     borderRadius: 12,
     paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: '#2E7D32',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   loginButtonDisabled: {
     opacity: 0.6,
@@ -322,7 +339,7 @@ const styles = StyleSheet.create({
   },
   securityText: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: '#81C784',
     textAlign: 'center',
     marginLeft: 6,
     lineHeight: 18,

@@ -252,7 +252,7 @@ export default function AdminDashboard() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={['#dc3545', '#c82333']}
+        colors={['#ffffff', '#f8f9fa', '#ffffff']}
         style={styles.gradientBackground}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -261,11 +261,11 @@ export default function AdminDashboard() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="shield-checkmark" size={24} color="#fff" />
+          <Ionicons name="shield-checkmark" size={24} color="#2E7D32" />
           <Text style={styles.headerTitle}>Admin Dashboard</Text>
         </View>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out" size={20} color="#fff" />
+          <Ionicons name="log-out" size={20} color="#2E7D32" />
         </TouchableOpacity>
       </View>
 
@@ -286,8 +286,8 @@ export default function AdminDashboard() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#dc3545']}
-            tintColor="#fff"
+            colors={['#2E7D32']}
+            tintColor="#2E7D32"
           />
         }
       >
@@ -364,7 +364,7 @@ export default function AdminDashboard() {
           
           {filteredSubscriptions.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="document-text-outline" size={48} color="rgba(255,255,255,0.5)" />
+              <Ionicons name="document-text-outline" size={48} color="#81C784" />
               <Text style={styles.emptyText}>
                 {currentFilter === 'all' ? 'No subscriptions found' :
                  `No ${currentFilter} subscriptions found`}
@@ -533,12 +533,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#dc3545',
+    backgroundColor: '#ffffff',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#fff',
+    color: '#2E7D32',
     fontWeight: '600',
   },
   header: {
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#2E7D32',
     marginLeft: 12,
   },
   logoutButton: {
@@ -568,19 +568,24 @@ const styles = StyleSheet.create({
   },
   adminWelcome: {
     fontSize: 16,
-    color: '#fff',
+    color: '#2E7D32',
     fontWeight: '600',
   },
   adminLastLogin: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#4CAF50',
     marginTop: 4,
   },
   content: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#ffffff',
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
   contentContainer: {
     padding: 20,
@@ -589,7 +594,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#2E7D32',
     marginBottom: 16,
   },
   statsContainer: {
@@ -601,12 +606,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   statCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
     width: '48%',
     marginBottom: 12,
     borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   statNumber: {
     fontSize: 24,
@@ -635,23 +645,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#F5F5F5',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: '#E0E0E0',
     minWidth: 80,
     alignItems: 'center',
   },
   activeFilterButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderColor: '#fff',
+    backgroundColor: '#2E7D32',
+    borderColor: '#2E7D32',
   },
   filterButtonText: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#666',
   },
   activeFilterButtonText: {
-    color: '#dc3545',
+    color: '#ffffff',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -660,21 +670,28 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: '#81C784',
     marginTop: 12,
   },
   subscriptionCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     marginBottom: 16,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E8F5E8',
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: '#F8F9FA',
   },
   packageInfo: {
     flexDirection: 'row',
@@ -736,7 +753,7 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     padding: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: '#F8F9FA',
   },
   actionButton: {
     flex: 1,

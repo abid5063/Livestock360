@@ -112,16 +112,25 @@ const OrderHistory = () => {
 
       const result = await response.json();
       if (result.success) {
+        // Show success alert only if ALL_ALERTS is enabled
         if (ALL_ALERTS) {
           Alert.alert('Success', 'Order marked as received!');
+        } else {
+          // Silent success - no alert shown
+          console.log('Order marked as received successfully (alert disabled)');
         }
+        
         // Refresh orders
         if (customerData) {
           await fetchOrders(customerData.id || customerData._id);
         }
       } else {
+        // Show error alert only if ALL_ALERTS is enabled
         if (ALL_ALERTS) {
           Alert.alert('Error', result.message || 'Failed to update order');
+        } else {
+          // Silent error - no alert shown
+          console.log('Failed to update order:', result.message);
         }
       }
     } catch (error) {
@@ -332,7 +341,7 @@ const OrderHistory = () => {
 
                 {order.farmerNotes && (
                   <View style={styles.notesSection}>
-                    <Text style={styles.notesLabel}>Farmer's Notes:</Text>
+                    <Text style={styles.notesLabel}>Notes:</Text>
                     <Text style={styles.notesText}>{order.farmerNotes}</Text>
                   </View>
                 )}

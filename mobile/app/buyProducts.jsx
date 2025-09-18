@@ -118,22 +118,9 @@ const BuyProducts = () => {
   };
 
   const calculateTotal = () => {
-    // Simple pricing logic - you can enhance this
-    const prices = {
-      MILK_COW: 50,
-      MILK_BUFFALO: 60,
-      MILK_GOAT: 70,
-      BUTTER: 200,
-      HEN_EGGS: 120,
-      DUCK_EGGS: 150,
-      // Legacy support for old format
-      EGGS_HEN: 120,
-      EGGS_DUCK: 150
-    };
-
     let total = 0;
     Object.entries(orderItems).forEach(([product, quantity]) => {
-      total += (prices[product] || 0) * quantity;
+      total += getProductPrice(product) * quantity;
     });
     return total;
   };
@@ -280,6 +267,36 @@ const BuyProducts = () => {
     return names[productType] || productType;
   };
 
+  const getProductUnit = (productType) => {
+    const units = {
+      MILK_COW: 'liter',
+      MILK_BUFFALO: 'liter',
+      MILK_GOAT: 'liter',
+      BUTTER: 'kg',
+      HEN_EGGS: 'dozen',
+      DUCK_EGGS: 'dozen',
+      // Legacy support for old format
+      EGGS_HEN: 'dozen',
+      EGGS_DUCK: 'dozen'
+    };
+    return units[productType] || 'unit';
+  };
+
+  const getProductPrice = (productType) => {
+    const prices = {
+      MILK_COW: 50,
+      MILK_BUFFALO: 60,
+      MILK_GOAT: 70,
+      BUTTER: 200,
+      HEN_EGGS: 120,
+      DUCK_EGGS: 150,
+      // Legacy support for old format
+      EGGS_HEN: 120,
+      EGGS_DUCK: 150
+    };
+    return prices[productType] || 0;
+  };
+
   const getProductIcon = (productType) => {
     const icons = {
       MILK_COW: 'water',
@@ -389,7 +406,14 @@ const BuyProducts = () => {
                           size={14} 
                           color={getProductColor(product.type)} 
                         />
-                        <Text style={styles.productTagText}>{product.name}</Text>
+                        <View style={styles.productTagInfo}>
+                          <Text style={styles.productTagText}>
+                            {product.name} ({getProductUnit(product.type)})
+                          </Text>
+                          <Text style={styles.productTagPrice}>
+                            ৳{getProductPrice(product.type)}
+                          </Text>
+                        </View>
                       </View>
                     ))}
                   </View>
@@ -440,7 +464,12 @@ const BuyProducts = () => {
                         size={20} 
                         color={getProductColor(product.type)} 
                       />
-                      <Text style={styles.productOrderName}>{product.name}</Text>
+                      <View style={styles.productNameContainer}>
+                        <Text style={styles.productOrderName}>{product.name}</Text>
+                        <Text style={styles.productUnit}>
+                          ৳{getProductPrice(product.type)} per {getProductUnit(product.type)}
+                        </Text>
+                      </View>
                     </View>
                     <View style={styles.quantityControls}>
                       <TouchableOpacity
@@ -480,7 +509,10 @@ const BuyProducts = () => {
                   {Object.entries(orderItems).map(([product, quantity]) => (
                     <View key={product} style={styles.summaryItem}>
                       <Text style={styles.summaryProduct}>
-                        {getProductDisplayName(product)} x {quantity}
+                        {getProductDisplayName(product)} x {quantity} {getProductUnit(product)}
+                      </Text>
+                      <Text style={styles.summaryPrice}>
+                        ৳{getProductPrice(product) * quantity}
                       </Text>
                     </View>
                   ))}
@@ -670,9 +702,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     gap: 4,
   },
+  productTagInfo: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
   productTagText: {
     fontSize: 12,
     color: '#333',
+  },
+  productTagPrice: {
+    fontSize: 11,
+    color: '#2E7D32',
+    fontWeight: 'bold',
   },
   // Modal Styles
   modalContainer: {
@@ -734,9 +775,17 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 8,
   },
+  productNameContainer: {
+    flex: 1,
+  },
   productOrderName: {
     fontSize: 16,
     color: '#333',
+  },
+  productUnit: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
   quantityControls: {
     flexDirection: 'row',
@@ -775,11 +824,18 @@ const styles = StyleSheet.create({
   summaryItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 6,
   },
   summaryProduct: {
     fontSize: 14,
     color: '#666',
+    flex: 1,
+  },
+  summaryPrice: {
+    fontSize: 14,
+    color: '#2E7D32',
+    fontWeight: 'bold',
   },
   summaryTotal: {
     borderTopWidth: 1,
