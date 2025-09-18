@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect } from "react";
 import { useLanguage } from "../utils/LanguageContext";
-import { useTranslation } from '@/node_modules/react-i18next';
+import { useTranslation } from 'react-i18next';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -383,8 +383,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   adminButton: {
-    backgroundColor: 'rgba(62, 146, 62, 0.85)',
-    borderColor: 'rgba(147, 240, 108, 0.3)',
+    backgroundColor: 'rgba(220, 53, 69, 0.85)',
+    borderColor: 'rgba(220, 53, 69, 0.3)',
   },
   adminButtonText: {
     color: '#fff',
