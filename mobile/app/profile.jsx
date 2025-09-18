@@ -52,8 +52,8 @@ export default function Profile() {
     MILK_BUFFALO: false,
     MILK_GOAT: false,
     BUTTER: false,
-    EGGS_HEN: false,
-    EGGS_DUCK: false
+    HEN_EGGS: false,
+    DUCK_EGGS: false
   });
   const [loadingProductSettings, setLoadingProductSettings] = useState(false);
 
@@ -163,8 +163,8 @@ export default function Profile() {
           MILK_BUFFALO: farmerData.sellingStatus?.sellsMilkBuffalo || false,
           MILK_GOAT: farmerData.sellingStatus?.sellsMilkGoat || false,
           BUTTER: farmerData.sellingStatus?.sellsButter || false,
-          EGGS_HEN: farmerData.sellingStatus?.sellsHenEggs || false,
-          EGGS_DUCK: farmerData.sellingStatus?.sellsDuckEggs || false
+          HEN_EGGS: farmerData.sellingStatus?.sellsHenEggs || false,
+          DUCK_EGGS: farmerData.sellingStatus?.sellsDuckEggs || false
         });
       }
     } catch (error) {
@@ -1322,29 +1322,29 @@ export default function Profile() {
                     
                     <TouchableOpacity
                       style={styles.productItem}
-                      onPress={() => toggleProductSetting('EGGS_HEN')}
+                      onPress={() => toggleProductSetting('HEN_EGGS')}
                       testID="product-eggs-hen"
                     >
                       <View style={styles.productInfo}>
                         <Ionicons name="ellipse" size={20} color="#F4A460" />
                         <Text style={styles.productName}>{t('profile.sellProductsModal.henEggs')}</Text>
                       </View>
-                      <View style={[styles.checkbox, productSettings.EGGS_HEN && styles.checkboxActive]}>
-                        {productSettings.EGGS_HEN && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      <View style={[styles.checkbox, productSettings.HEN_EGGS && styles.checkboxActive]}>
+                        {productSettings.HEN_EGGS && <Ionicons name="checkmark" size={16} color="#fff" />}
                       </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       style={styles.productItem}
-                      onPress={() => toggleProductSetting('EGGS_DUCK')}
+                      onPress={() => toggleProductSetting('DUCK_EGGS')}
                       testID="product-eggs-duck"
                     >
                       <View style={styles.productInfo}>
                         <Ionicons name="ellipse" size={20} color="#FFFACD" />
                         <Text style={styles.productName}>{t('profile.sellProductsModal.duckEggs')}</Text>
                       </View>
-                      <View style={[styles.checkbox, productSettings.EGGS_DUCK && styles.checkboxActive]}>
-                        {productSettings.EGGS_DUCK && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      <View style={[styles.checkbox, productSettings.DUCK_EGGS && styles.checkboxActive]}>
+                        {productSettings.DUCK_EGGS && <Ionicons name="checkmark" size={16} color="#fff" />}
                       </View>
                     </TouchableOpacity>
                   </View>

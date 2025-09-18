@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguage } from '../utils/LanguageContext';
 import { useTranslation } from 'react-i18next';
 
-const API_KEY = "AIzaSyD6DkmdElxGQt0Tp0kDglGHyUbvw2Wwooc";
+const API_KEY = "YOUR_GOOGLE_API_KEY";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
 // Component for displaying veterinary locations in a table format
